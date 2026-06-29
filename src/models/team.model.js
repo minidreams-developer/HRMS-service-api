@@ -1,33 +1,45 @@
 const mongoose = require("mongoose");
+const { toJSON, paginate } = require("./plugins");
 
 const teamSchema = new mongoose.Schema(
   {
     teamName: {
       type: String,
-      required: true,
+    },
+    name: {
+      type: String,
     },
     teamDescription: {
       type: String,
-      required: true,
     },
     teamCode: {
       type: String,
-      required: true,
+    },
+    teamId: {
+      type: String,
     },
     teamLead: {
-      type: mongoose.Schema.Types.ObjectId,
+      type: mongoose.Schema.Types.Mixed,
       ref: "User",
-      required: true,
     },
-    teamEmployees: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "User",
-      },
-    ],
+    teamEmployees: {
+      type: mongoose.Schema.Types.Mixed,
+      default: [],
+    },
+    department: {
+      type: mongoose.Schema.Types.Mixed,
+      ref: "Department",
+    },
+    leadDepartment: {
+      type: mongoose.Schema.Types.Mixed,
+      ref: "Department",
+    },
   },
   { timestamps: true },
 );
+
+teamSchema.plugin(toJSON);
+teamSchema.plugin(paginate);
 
 const teamModel = mongoose.model("Team", teamSchema);
 module.exports = teamModel;
