@@ -1,27 +1,30 @@
 const mongoose = require("mongoose");
+const { toJSON, paginate } = require("./plugins");
 
-const leaveRequestsSchema = new mongoose.schema(
+const leaveRequestsSchema = new mongoose.Schema(
   {
     employeeId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      required: true,
     },
     leaveType: {
       type: String,
-      enum: ["sick", "personal", "compOff"],
-      required: true,
     },
     startDate: {
       type: Date,
-      required: true,
     },
-    singleDate:{
-        type:Date,
+    singleDate: {
+      type: Date,
+    },
+    department: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Department",
+    },
+    designation: {
+      type: String,
     },
     endDate: {
       type: Date,
-      required: true,
     },
     reason: {
       type: String,
@@ -29,12 +32,15 @@ const leaveRequestsSchema = new mongoose.schema(
     },
     status: {
       type: String,
-      enum: ["pending", "approved", "rejected"],
+      enum: ["pending", "approved", "ended"],
       default: "pending",
     },
   },
   { timestamps: true },
 );
+
+leaveRequestsSchema.plugin(toJSON);
+leaveRequestsSchema.plugin(paginate);
 
 const LeaveRequests = mongoose.model("LeaveRequests", leaveRequestsSchema);
 module.exports = LeaveRequests;

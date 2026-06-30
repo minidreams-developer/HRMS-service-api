@@ -1,6 +1,18 @@
 const express = require('express');
 const authRoute = require('./auth.route');
 const userRoute = require('./user.route');
+const assetRoute = require('./asset.route');
+const salaryDetailsRoute = require('./salaryDetails.route');
+const leaderboardRoute = require('./leaderboard.route');
+const teamRoute = require('./team.route');
+const branchRoute = require('./branch.route');
+const departmentRoute = require('./department.route');
+const offBoardRoute = require('./offBoard.route');
+const attendanceRoute = require('./attendance.route');
+const shiftRoute = require('./shift.route');
+const leaveRequestsRoute = require('./leaveRequests.route');
+const overtimeRoute = require('./overtimeManagement.route');
+const holidayRoute = require('./holiday.route');
 const docsRoute = require('./docs.route');
 const config = require('../../config/config');
 
@@ -14,6 +26,54 @@ const defaultRoutes = [
   {
     path: '/users',
     route: userRoute,
+  },
+  {
+    path: '/assets',
+    route: assetRoute,
+  },
+  {
+    path: '/salary-details',
+    route: salaryDetailsRoute,
+  },
+  {
+    path: '/leaderboard',
+    route: leaderboardRoute,
+  },
+  {
+    path: '/teams',
+    route: teamRoute,
+  },
+  {
+    path: '/branches',
+    route: branchRoute,
+  },
+  {
+    path: '/departments',
+    route: departmentRoute,
+  },
+  {
+    path: '/off-board',
+    route: offBoardRoute,
+  },
+  {
+    path: '/attendance',
+    route: attendanceRoute,
+  },
+  {
+    path: '/shifts',
+    route: shiftRoute,
+  },
+  {
+    path: '/leave-requests',
+    route: leaveRequestsRoute,
+  },
+  {
+    path: '/overtime',
+    route: overtimeRoute,
+  },
+  {
+    path: '/holidays',
+    route: holidayRoute,
   },
 ];
 

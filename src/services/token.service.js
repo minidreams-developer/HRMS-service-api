@@ -113,6 +113,55 @@ const generateVerifyEmailToken = async (user) => {
   return verifyEmailToken;
 };
 
+/**
+ * Generate a 6-digit OTP for offboard email verification and persist it
+ * @param {ObjectId} offBoardId
+ * @returns {Promise<string>} the OTP code
+ */
+const generateOffBoardOtp = async (offBoardId) => {
+  // Delete any existing OTP for this offboard record
+  await Token.deleteMany({ user: offBoardId, type: tokenTypes.OFFBOARD_OTP });
+
+  const otp = String(Math.floor(100000 + Math.random() * 900000));
+  const expires = moment().add(config.jwt.otpExpirationMinutes, 'minutes');
+
+  await Token.create({
+    token: otp,
+    user: offBoardId,
+    expires: expires.toDate(),
+    type: tokenTypes.OFFBOARD_OTP,
+    blacklisted: false,
+  });
+
+  return otp;
+};
+
+/**
+ * Verify offboard OTP
+ * @param {ObjectId} offBoardId
+ * @param {string} otp
+ * @returns {Promise<void>}
+ */
+const verifyOffBoardOtp = async (offBoardId, otp) => {
+  const tokenDoc = await Token.findOne({
+    token: otp,
+    user: offBoardId,
+    type: tokenTypes.OFFBOARD_OTP,
+    blacklisted: false,
+  });
+
+  if (!tokenDoc) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Invalid OTP');
+  }
+
+  if (moment().isAfter(moment(tokenDoc.expires))) {
+    await tokenDoc.deleteOne();
+    throw new ApiError(httpStatus.BAD_REQUEST, 'OTP has expired');
+  }
+
+  await tokenDoc.deleteOne();
+};
+
 module.exports = {
   generateToken,
   saveToken,
@@ -120,4 +169,6 @@ module.exports = {
   generateAuthTokens,
   generateResetPasswordToken,
   generateVerifyEmailToken,
+  generateOffBoardOtp,
+  verifyOffBoardOtp,
 };
