@@ -13,7 +13,7 @@ const teamSchema = new mongoose.Schema(
       type: String,
     },
     teamLead: {
-      type: mongoose.Schema.Types.ObjectId,
+      type: mongoose.Schema.Types.Mixed,
       ref: "User",
     },
     department: {
