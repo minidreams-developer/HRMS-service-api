@@ -10,7 +10,7 @@ const createTeam = catchAsync(async (req, res) => {
 });
 
 const getTeams = catchAsync(async (req, res) => {
-  const filter = pick(req.query, ['teamName', 'teamCode']);
+  const filter = pick(req.query, ['teamName', 'teamCode', 'teamLead']);
   const options = pick(req.query, ['sortBy', 'limit', 'page']);
   const result = await teamService.queryTeams(filter, options);
   res.send(result);
@@ -34,10 +34,22 @@ const deleteTeam = catchAsync(async (req, res) => {
   res.status(httpStatus.NO_CONTENT).send();
 });
 
+const generateTeamId = catchAsync(async (req, res) => {
+  const teamCode = await teamService.generateUniqueTeamId();
+  res.send({ teamCode });
+});
+
+const addMember = catchAsync(async (req, res) => {
+  const team = await teamService.addMemberToTeam(req.params.teamId, req.body.userId);
+  res.send(team);
+});
+
 module.exports = {
   createTeam,
   getTeams,
   getTeam,
   updateTeam,
   deleteTeam,
+  generateTeamId,
+  addMember,
 };

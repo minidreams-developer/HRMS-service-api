@@ -7,8 +7,38 @@ function generateEmployeeId() {
   return `${prefix}${randomNumber}`;
 }
 
-//console.log(generateBookingId()); // example: COOKDIN654321
+/** Generate Team Id */
+function generateTeamId() {
+  const prefix = "TEAM";
+  const randomNumber = crypto.randomInt(100000, 999999);
+  return `${prefix}${randomNumber}`;
+}
+
+/** Generate Department Id */
+function generateDepartmentId() {
+  const prefix = "DEPT";
+  const randomNumber = crypto.randomInt(100000, 999999);
+  return `${prefix}${randomNumber}`;
+}
+
+/** Generate Branch Id */
+function generateBranchId() {
+  const prefix = "BRN";
+  const randomNumber = crypto.randomInt(100000, 999999);
+  return `${prefix}${randomNumber}`;
+}
+
+/** Generate Shift Id */
+function generateShiftId() {
+  const prefix = "SHF";
+  const randomNumber = crypto.randomInt(100000, 999999);
+  return `${prefix}${randomNumber}`;
+}
 
 module.exports = {
   generateEmployeeId,
+  generateTeamId,
+  generateDepartmentId,
+  generateBranchId,
+  generateShiftId,
 };

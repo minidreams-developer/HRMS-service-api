@@ -1,53 +1,143 @@
 const mongoose = require("mongoose");
+const { toJSON, paginate } = require("./plugins");
+
+const breakSchema = new mongoose.Schema({
+  breakName: {
+    type: String,
+    trim: true,
+  },
+  duration: {
+    type: Number, // duration in minutes
+  },
+  startTime: {
+    type: String,
+    trim: true,
+  },
+  endTime: {
+    type: String,
+    trim: true,
+  },
+});
+
+const timingSchema = new mongoose.Schema({
+  day: {
+    type: String,
+    trim: true,
+  },
+  startTime: {
+    type: String,
+    trim: true,
+  },
+  endTime: {
+    type: String,
+    trim: true,
+  },
+  off: {
+    type: Boolean,
+    default: false,
+  },
+});
+
+const gracePeriodSchema = new mongoose.Schema({
+  earlyCheckIn: {
+    type: Number,
+    default: 0,
+  },
+  lateCheckIn: {
+    type: Number,
+    default: 0,
+  },
+  earlyCheckOut: {
+    type: Number,
+    default: 0,
+  },
+  lateCheckOut: {
+    type: Number,
+    default: 0,
+  },
+});
 
 const shiftSchema = new mongoose.Schema(
   {
     userId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-      required: true,
+      type: mongoose.Schema.Types.Mixed,
     },
     shiftName: {
       type: String,
       trim: true,
     },
-    startTime: {
+    shiftCode: {
       type: String,
       trim: true,
     },
-    endTime: {
+    
+    // Timing Information
+    shiftType: {
       type: String,
-      trim: true,
+      default: "Fixed",
     },
-    workingDays: {
-      type: [String],
-      enum: [
-        "Monday",
-        "Tuesday",
-        "Wednesday",
-        "Thursday",
-        "Friday",
-        "Saturday",
-        "Sunday",
-      ],
+    sameTimingForAllDays: {
+      type: Boolean,
+      default: false,
+    },
+    timings: {
+      type: [timingSchema],
       default: [],
     },
+    totalShiftDuration: {
+      type: String,
+      trim: true,
+    },
+    minWorkingHours: {
+      type: String,
+      trim: true,
+    },
+
+    // Advanced Timing Rules
+    gracePeriod: {
+      type: gracePeriodSchema,
+      default: {},
+    },
+
+    // Break Management
+    breakManagement: {
+      enabled: {
+        type: Boolean,
+        default: false,
+      },
+      breakType: {
+        type: String,
+        trim: true,
+      },
+      duration: {
+        type: Number, // Global break duration if applicable
+      },
+      multipleBreaksSupport: {
+        type: Boolean,
+        default: false,
+      },
+      breaks: [breakSchema],
+    },
+
+    // Attendance Rules
+    attendanceRules: {
+      lateMarkAfter: {
+        type: Number,
+        default: 0,
+      },
+      autoHalfDayAfterLate: {
+        type: Number,
+        default: 0,
+      },
+    },
+
+    // Legacy / Other fields
     weekOff: {
       type: [String],
-      enum: [
-        "Monday",
-        "Tuesday",
-        "Wednesday",
-        "Thursday",
-        "Friday",
-        "Saturday",
-        "Sunday",
-      ],
       default: [],
     },
     compOff: {
       type: [String],
-      enum: ["yes", "no"],
       default: "no",
     },
     isShiftActive: {
@@ -55,8 +145,11 @@ const shiftSchema = new mongoose.Schema(
       default: true,
     },
   },
-  { timestamps: true },
+  { timestamps: true }
 );
+
+shiftSchema.plugin(toJSON);
+shiftSchema.plugin(paginate);
 
 const shiftModel = mongoose.model("Shift", shiftSchema);
 module.exports = shiftModel;

@@ -55,9 +55,25 @@ If you did not create an account, then ignore this email.`;
   await sendEmail(to, subject, text);
 };
 
+/**
+ * Send offboard email verification OTP
+ * @param {string} to
+ * @param {string} otp
+ * @returns {Promise}
+ */
+const sendOffBoardOtpEmail = async (to, otp) => {
+  const subject = 'Offboard Email Verification OTP';
+  const text = `Dear user,
+Your OTP for offboard email verification is: ${otp}
+This OTP is valid for 10 minutes.
+If you did not request this, please ignore this email.`;
+  await sendEmail(to, subject, text);
+};
+
 module.exports = {
   transport,
   sendEmail,
   sendResetPasswordEmail,
   sendVerificationEmail,
+  sendOffBoardOtpEmail,
 };

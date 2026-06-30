@@ -4,14 +4,110 @@ const ApiError = require('../utils/ApiError');
 const catchAsync = require('../utils/catchAsync');
 const { userService } = require('../services');
 
+const registerEmployee = catchAsync(async (req, res) => {
+  const user = await userService.registerEmployee(req.body);
+  res.status(httpStatus.CREATED).send(user);
+});
+
 const createUser = catchAsync(async (req, res) => {
-  const user = await userService.createUser(req.body);
+  // Transform frontend payload to match backend schema
+  const transformedData = {
+    // Personal Information
+    name: req.body.name || req.body.employeeName,
+    email: req.body.email,
+    phone: req.body.phone || req.body.contact,
+    gender: req.body.gender,
+    dateOfBirth: req.body.dateOfBirth,
+    age: req.body.age,
+    maritalStatus: req.body.maritalStatus,
+    motherTongue: req.body.motherTongue,
+    identificationMark: req.body.identificationMark,
+    religion: req.body.religion,
+    
+    // Address Information
+    address: req.body.address,
+    city: req.body.city,
+    district: req.body.district,
+    state: req.body.state,
+    pinCode: req.body.pinCode,
+    
+    // Profile
+    profileImage: req.body.profileImage,
+    
+    // Authentication
+    password: req.body.password || 'defaultPassword123',
+    role: req.body.role || 'employee',
+    
+    // Work Details
+    branch: req.body.branch,
+    
+    // Emergency Contacts
+    emergencyContacts: req.body.emergencyContacts || [],
+    
+    // Documents
+    documents: req.body.documents || [],
+    
+    // Remarks
+    remarks: req.body.remarks,
+    
+    // Employee Details
+    employee: {
+      employeeId: req.body.employeeId,
+      designation: req.body.designation,
+      department: req.body.department,
+      team: req.body.team,
+      shift: req.body.shift,
+      employeeType: req.body.employeeType,
+      employeeStatus: req.body.employeeStatus || 'active',
+      attendanceType: req.body.attendanceType,
+      attendancePermission: req.body.attendancePermission,
+      workInformation: {
+        joinedDate: req.body.dateOfJoining,
+        experienceType: req.body.experienceType,
+        totalYearsOfExperience: req.body.totalYearsOfExperience,
+        lastCompanyName: req.body.lastCompanyName,
+        location: req.body.location,
+        department: req.body.department,
+      }
+    },
+    
+    // Salary Details
+    salaryDetails: {
+      ctcAnnual: req.body.ctcAnnual,
+      monthlyCTC: req.body.monthlyCTC,
+      basicSalary: req.body.basicSalary,
+      hra: req.body.hra,
+      conveyanceAllowance: req.body.conveyanceAllowance,
+      specialAllowance: req.body.specialAllowance,
+      specialAllowance2: req.body.specialAllowance2,
+      otherFixedAllowances: req.body.otherFixedAllowances,
+    },
+    
+    // Bank Details
+    bankDetails: {
+      salaryDisbursementType: req.body.salaryDisbursementType,
+      accHolderName: req.body.accHolderName,
+      bank: req.body.bank,
+      accNumber: req.body.accNumber,
+      ifscCode: req.body.ifscCode,
+      bankBranch: req.body.bankBranch,
+      esiNumber: req.body.esiNumber,
+      pfNumber: req.body.pfNumber,
+    }
+  };
+
+  const user = await userService.createUser(transformedData);
   res.status(httpStatus.CREATED).send(user);
 });
 
 const getUsers = catchAsync(async (req, res) => {
   const filter = pick(req.query, ['name', 'role']);
   const options = pick(req.query, ['sortBy', 'limit', 'page']);
+
+  if (req.query.empId) {
+    filter.employeeId = req.query.empId;
+  }
+
   const result = await userService.queryUsers(filter, options);
   res.send(result);
 });
@@ -40,6 +136,7 @@ const generateEmployeeId = catchAsync(async (req, res) => {
 });
 
 module.exports = {
+  registerEmployee,
   createUser,
   getUsers,
   getUser,

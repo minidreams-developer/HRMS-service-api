@@ -1,11 +1,10 @@
 const mongoose = require("mongoose");
+const { toJSON, paginate } = require("./plugins");
 
 const workExperienceSchema = new mongoose.Schema(
   {
     userId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-      required: true,
+      type: mongoose.Schema.Types.Mixed,
     },
     companyName: {
       type: String,
@@ -28,6 +27,9 @@ const workExperienceSchema = new mongoose.Schema(
   },
   { timestamps: true },
 );
+
+workExperienceSchema.plugin(toJSON);
+workExperienceSchema.plugin(paginate);
 
 const WorkExperience = mongoose.model("WorkExperience", workExperienceSchema);
 module.exports = WorkExperience;

@@ -3,135 +3,38 @@ const validator = require("validator");
 const bcrypt = require("bcryptjs");
 const { toJSON, paginate } = require("./plugins");
 const { roles } = require("../config/roles");
-
-const employeeLoginShcema = new mongoose.Schema({
-  email: {
-    type: String,
-    required: true,
-    unique: true,
-    trim: true,
-    lowercase: true,
-    validate(value) {
-      if (!validator.isEmail(value)) {
-        throw new Error("Invalid email");
-      }
-    },
-  },
-
-  password: {
-    type: String,
-    required: true,
-    trim: true,
-    minlength: 8,
-    validate(value) {
-      if (!value.match(/\d/) || !value.match(/[a-zA-Z]/)) {
-        throw new Error(
-          "Password must contain at least one letter and one number",
-        );
-      }
-    },
-  },
-});
-
-const employeeSchema = new mongoose.Schema({
-  employeeId: {
-    type: String,
-    required: true,
-    unique: true,
-  },
-  designation: {
-    type: String,
-    required: true,
-  },
-  department: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "Department",
-    required: true,
-  },
-  shift: {
-    type: String,
-    required: true,
-  },
-  employeeStatus: {
-    type: String,
-    enum: ["active", "inactive", "relieved"],
-    default: "active",
-  },
-  employeeDocuments: [
-    {
-      fileUrl: {
-        type: String,
-        trim: true,
-      },
-      fileType: {
-        type: String,
-        trim: true,
-      },
-    },
-  ],
-  employeeType: {
-    type: String,
-    enum: ["full_time", "part_time"],
-    default: "full_time",
-  },
-  workInformation: {
-    joinedDate: {
-      type: Date,
-      required: true,
-    },
-    experienceType: {
-      type: String,
-    },
-    department: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Department",
-      required: true,
-    },
-    registrationStatus: {
-      personalInformation: {
-        type: Boolean,
-        default: false,
-      },
-      documents: {
-        type: Boolean,
-        default: false,
-      },
-    },
-  },
-});
+const emergencyContact = require("./emergencyContact.model");
+const SalaryDetails = require("./salaryDetails.model");
 
 const userSchema = mongoose.Schema(
   {
     name: {
       type: String,
-      required: true,
       trim: true,
     },
-    profilePic: {
+    employeeId: {
       type: String,
-      trim: true,
     },
     email: {
       type: String,
-      required: true,
       unique: true,
+      sparse: true,
       trim: true,
       lowercase: true,
       validate(value) {
-        if (!validator.isEmail(value)) {
+        if (value && !validator.isEmail(value)) {
           throw new Error("Invalid email");
         }
       },
     },
     password: {
       type: String,
-      required: true,
       trim: true,
       minlength: 8,
       validate(value) {
         if (!value.match(/\d/) || !value.match(/[a-zA-Z]/)) {
           throw new Error(
-            "Password must contain at least one letter and one number",
+            "Password must contain at least one letter and one number"
           );
         }
       },
@@ -140,42 +43,128 @@ const userSchema = mongoose.Schema(
     role: {
       type: String,
       enum: roles,
-      default: "user",
+      default: "employee",
     },
-    age: {
-      type: Number,
-      trim: true,
-    },
+
     phone: {
       type: Number,
-      trim: true,
+      unique: true,
+      sparse: true,
     },
+
     gender: {
       type: String,
-      trim: true,
+      enum: ["male", "female"],
+      lowercase: true,
     },
+
+    dateOfBirth: {
+      type: Date,
+    },
+
+    age: Number,
+
+    spokenLanguages: [
+      {
+        type: String,
+      },
+    ],
+
+    martialStatus: {
+      type: String,
+      default: "unMarried"
+    },
+
+    motherTongue: {
+      type: String,
+    },
+
+    identificationMark: {
+      type: String,
+    },
+
+    religion: {
+      type: String
+    },
+
+    documentNo: {
+      aadharNo: {
+        type: Number
+      },
+      panNo: {
+        type: String
+      },
+    },
+
+    profilePic: {
+      type: String,
+    },
+
+    address: [{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Address"
+    }],
+
+    emergencyContact: [{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "EmergencyContact"
+    }],
+
+    employeeProfileStatus: {
+      personalInformation: { type: Boolean, default: false },
+      DocumentUploads: { type: Boolean, default: false },
+      workDetails: { type: Boolean, default: false },
+    },
+
+    userDocuments: [{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "UserDocument",
+    }],
+
+    workInformation: {
+      joinedDate: { type: Date, default: Date.now },
+      experienceType: { type: String },
+      department: { type: mongoose.Schema.Types.Mixed },
+      team: { type: mongoose.Schema.Types.Mixed },
+      branch: { type: mongoose.Schema.Types.Mixed },
+      contractAgent: { type: mongoose.Schema.Types.Mixed },
+      reportingPerson: { type: mongoose.Schema.Types.Mixed },
+      AttendanceType: { type: String },
+      shiftId: { type: mongoose.Schema.Types.Mixed },
+      bankDetails: [{ type: mongoose.Schema.Types.ObjectId, ref: "BankDetails" }],
+      SalaryDetails: { type: mongoose.Schema.Types.ObjectId, ref: "SalaryDetails" },
+      userRemarks: { type: String },
+      designation:{type:String, default:"employee"},
+    },
+
+
+    approvalStatus: {
+      type: String,
+      enum: ["pending", "approved", "rejected"],
+      default: "pending",
+    },
+
+    firebaseToken: {
+      type: String,
+      default: null,
+    },
+
     isEmailVerified: {
       type: Boolean,
       default: false,
     },
-    martialStatus: {
-      type: String,
-      trim: true,
+    isProfileCompleted: {
+      type: Boolean,
+      default: false,
     },
-    motherTongue: {
-      type: String,
-      trim: true,
+    isActive: {
+      type: Boolean,
+      default: true,
     },
-    identificationMark: {
-      type: String,
-      trim: true,
-    },
-    employee: employeeSchema,
-    employeeLogin: employeeLoginShcema,
   },
   {
     timestamps: true,
-  },
+  }
 );
 
 // add plugin that converts mongoose to json
@@ -189,7 +178,12 @@ userSchema.plugin(paginate);
  * @returns {Promise<boolean>}
  */
 userSchema.statics.isEmailTaken = async function (email, excludeUserId) {
-  const user = await this.findOne({ email, _id: { $ne: excludeUserId } });
+  const user = await this.findOne({
+    email,
+    _id: {
+      $ne: excludeUserId,
+    },
+  });
   return !!user;
 };
 

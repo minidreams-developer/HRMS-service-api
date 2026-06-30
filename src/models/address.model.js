@@ -1,23 +1,6 @@
 const mongoose = require("mongoose");
+const { toJSON, paginate } = require("./plugins");
 
-const emergencyContactSchema = new mongoose.Schema({
-  contactName: {
-    type: String,
-    trim: true,
-  },
-  phone: {
-    type: Number,
-    trim: true,
-  },
-  relattionship: {
-    type: String,
-    trim: true,
-  },
-  mobileNumber: {
-    type: Number,
-    trim: true,
-  },
-});
 
 const addressSchema = new mongoose.Schema({
   addressLine1: {
@@ -40,8 +23,10 @@ const addressSchema = new mongoose.Schema({
     type: Number,
     trim: true,
   },
-  emergencyContact: [emergencyContactSchema],
 });
+
+addressSchema.plugin(toJSON);
+addressSchema.plugin(paginate);
 
 const Address = mongoose.model("Address", addressSchema);
 module.exports = Address;

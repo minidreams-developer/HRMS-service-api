@@ -1,27 +1,21 @@
 const mongoose = require("mongoose");
+const { toJSON, paginate } = require("./plugins");
 
 const attendanceSchema = new mongoose.Schema({
   employeeId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "User",
-    required: true,
+    type: mongoose.Schema.Types.Mixed,
   },
   date: {
     type: Date,
-    required: true,
   },
   shiftId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "Shift",
-    required: true,
+    type: mongoose.Schema.Types.Mixed,
   },
   loginTime: {
     type: Date,
-    required: true,
   },
   logoutTime: {
     type: Date,
-    required: true,
   },
   IsOverTimeWoked: {
     type: Boolean,
@@ -35,11 +29,19 @@ const attendanceSchema = new mongoose.Schema({
     type: Number,
     default: 0,
   },
+  attendanceStatus: {
+    type: String,
+    enum: ["onTime", "earlyOut", "arrivedLate"],
+    default: "onTime",
+  },
   remarks: {
     type: String,
     trim: true,
   },
 });
+
+attendanceSchema.plugin(toJSON);
+attendanceSchema.plugin(paginate);
 
 const Attendance = mongoose.model("Attendance", attendanceSchema);
 module.exports = Attendance;

@@ -1,17 +1,11 @@
-const mongoose = require("mongoose");
+  const mongoose = require("mongoose");
 const { toJSON, paginate } = require("./plugins");
 
 const branchSchema = new mongoose.Schema(
   {
+    // Basic Details
     branchName: {
       type: String,
-    },
-    name: {
-      type: String,
-    },
-    branchHead: {
-      type: mongoose.Schema.Types.Mixed,
-      ref: "User",
     },
     branchNumber: {
       type: String,
@@ -19,28 +13,31 @@ const branchSchema = new mongoose.Schema(
     branchType: {
       type: String,
     },
-    activeStatus: {
+    branchStatus: {
       type: String,
       enum: ["active", "inactive"],
       default: "active",
     },
-    status: {
-      type: String,
-    },
     effectiveFromDate: {
       type: Date,
+    },
+
+    // Contact Details
+    branchHead: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
     },
     phoneNumber: {
       type: String,
     },
-    emergencyContact: {
+    emergencyContactNumber: {
       type: String,
     },
     email: {
       type: String,
-      trim: true,
-      lowercase: true,
     },
+
+    // Address
     address: {
       type: String,
     },
@@ -59,16 +56,22 @@ const branchSchema = new mongoose.Schema(
     geoLocation: {
       type: String,
     },
-    departments: {
-      type: mongoose.Schema.Types.Mixed,
-      default: [],
-    },
-    shifts: {
-      type: mongoose.Schema.Types.Mixed,
-      default: [],
-    },
+
+    // Other Details
+    departments: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Department",
+      },
+    ],
+    shifts: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Shift",
+      },
+    ],
   },
-  { timestamps: true },
+  { timestamps: true }
 );
 
 branchSchema.plugin(toJSON);

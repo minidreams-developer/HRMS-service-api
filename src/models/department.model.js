@@ -1,39 +1,35 @@
 const mongoose = require("mongoose");
+const { toJSON, paginate } = require("./plugins");
 
 const departmentSchema = new mongoose.Schema(
   {
     departmentName: {
       type: String,
-      required: true,
     },
     departmentDescription: {
       type: String,
-      required: true,
     },
     departmentCode: {
       type: String,
-      required: true,
     },
-    departmentManager: {
+    departmentHead: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      required: true,
     },
-    departmentEmployees: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "User",
-      },
-    ],
-    departmentTeams: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "Team",
-      },
-    ],
+    departmentEmployees: {
+      type: [mongoose.Schema.Types.Mixed],
+      default: [],
+    },
+    departmentTeams: {
+      type: [mongoose.Schema.Types.Mixed],
+      default: [],
+    },
   },
   { timestamps: true },
 );
+
+departmentSchema.plugin(toJSON);
+departmentSchema.plugin(paginate);
 
 const departmentModel = mongoose.model("Department", departmentSchema);
 module.exports = departmentModel;

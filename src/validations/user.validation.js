@@ -1,6 +1,10 @@
 const Joi = require('joi');
 const { password, objectId } = require('./custom.validation');
 
+const registerEmployee = {
+  body: Joi.object().unknown(true),
+};
+
 const createUser = {
   body: Joi.object().keys({
     email: Joi.string().required().email(),
@@ -14,6 +18,7 @@ const getUsers = {
   query: Joi.object().keys({
     name: Joi.string(),
     role: Joi.string(),
+    empId: Joi.string(),
     sortBy: Joi.string(),
     limit: Joi.number().integer(),
     page: Joi.number().integer(),
@@ -61,6 +66,7 @@ const deleteUser = {
 };
 
 module.exports = {
+  registerEmployee,
   createUser,
   getUsers,
   getUser,

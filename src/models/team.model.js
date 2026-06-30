@@ -6,33 +6,23 @@ const teamSchema = new mongoose.Schema(
     teamName: {
       type: String,
     },
-    name: {
-      type: String,
-    },
     teamDescription: {
       type: String,
     },
     teamCode: {
       type: String,
     },
-    teamId: {
-      type: String,
-    },
     teamLead: {
       type: mongoose.Schema.Types.Mixed,
       ref: "User",
     },
-    teamEmployees: {
-      type: mongoose.Schema.Types.Mixed,
-      default: [],
-    },
     department: {
-      type: mongoose.Schema.Types.Mixed,
+      type: mongoose.Schema.Types.ObjectId,
       ref: "Department",
     },
-    leadDepartment: {
-      type: mongoose.Schema.Types.Mixed,
-      ref: "Department",
+    teamEmployees: {
+      type: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+      default: [],
     },
   },
   { timestamps: true },

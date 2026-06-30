@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const { toJSON, paginate } = require("./plugins");
 
 const esiAndPf = new mongoose.Schema({
   esiNumber: {
@@ -14,9 +15,7 @@ const esiAndPf = new mongoose.Schema({
 const bankDetailsSchema = new mongoose.Schema(
   {
     userId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-      required: true,
+      type: mongoose.Schema.Types.Mixed,
     },
     accountHolderName: {
       type: String,
@@ -46,6 +45,9 @@ const bankDetailsSchema = new mongoose.Schema(
     timestamps: true,
   },
 );
+
+bankDetailsSchema.plugin(toJSON);
+bankDetailsSchema.plugin(paginate);
 
 const bankDetailsModel = mongoose.model("BankDetails", bankDetailsSchema);
 module.exports = bankDetailsModel;

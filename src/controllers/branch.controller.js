@@ -10,7 +10,7 @@ const createBranch = catchAsync(async (req, res) => {
 });
 
 const getBranches = catchAsync(async (req, res) => {
-  const filter = pick(req.query, ['branchName', 'activeStatus', 'status', 'city', 'state']);
+  const filter = pick(req.query, ['branchName', 'branchNumber', 'activeStatus']);
   const options = pick(req.query, ['sortBy', 'limit', 'page']);
   const result = await branchService.queryBranches(filter, options);
   res.send(result);
@@ -34,10 +34,16 @@ const deleteBranch = catchAsync(async (req, res) => {
   res.status(httpStatus.NO_CONTENT).send();
 });
 
+const generateBranchId = catchAsync(async (req, res) => {
+  const branchNumber = await branchService.generateUniqueBranchId();
+  res.send({ branchNumber });
+});
+
 module.exports = {
   createBranch,
   getBranches,
   getBranch,
   updateBranch,
   deleteBranch,
+  generateBranchId,
 };
