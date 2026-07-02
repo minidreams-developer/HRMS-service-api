@@ -4,6 +4,7 @@ const allRoles = {
   team_lead: [],
   agent: [],
   admin: ['getUsers', 'manageUsers'],
+  contractor:[],
 };
 
 const roles = Object.keys(allRoles);

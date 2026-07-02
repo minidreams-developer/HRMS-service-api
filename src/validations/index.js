@@ -8,3 +8,4 @@ module.exports.attendanceValidation = require('./attendance.validation');
 module.exports.shiftValidation = require('./shift.validation');
 module.exports.leaveRequestsValidation = require('./leaveRequests.validation');
 module.exports.overtimeManagementValidation = require('./overtimeManagement.validation');
+module.exports.contractorValidation = require('./contractor.validation');
