@@ -14,9 +14,15 @@ const router = express.Router();
  * DELETE /v1/contractors/:id         — remove
  */
 
+// validate(contractorValidation.registerContractor),
+// validate(contractorValidation.getContractors), 
+// validate(contractorValidation.getContractor), 
+// validate(contractorValidation.updateContractor),
+// validate(contractorValidation.deleteContractor), 
+
 router
   .route('/register')
-  .post(validate(contractorValidation.registerContractor), contractorController.registerContractor);
+  .post(contractorController.registerContractor);
 
 router
   .route('/generate-id')
@@ -24,12 +30,12 @@ router
 
 router
   .route('/')
-  .get(validate(contractorValidation.getContractors), contractorController.getContractors);
+  .get(contractorController.getContractors);
 
 router
   .route('/:contractorId')
-  .get(validate(contractorValidation.getContractor), contractorController.getContractor)
-  .patch(validate(contractorValidation.updateContractor), contractorController.updateContractor)
-  .delete(validate(contractorValidation.deleteContractor), contractorController.deleteContractor);
+  .get(contractorController.getContractor)
+  .patch(contractorController.updateContractor)
+  .delete(contractorController.deleteContractor);
 
 module.exports = router;

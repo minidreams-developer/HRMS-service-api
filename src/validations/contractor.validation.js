@@ -91,10 +91,11 @@ const getContractors = {
 
 /**
  * GET /v1/contractors/:contractorId
+ * Accepts MongoDB _id (ObjectId) OR employeeId (e.g. CTR-258540)
  */
 const getContractor = {
   params: Joi.object().keys({
-    contractorId: Joi.string().custom(objectId).required(),
+    contractorId: Joi.string().required(),
   }),
 };
 
@@ -103,7 +104,7 @@ const getContractor = {
  */
 const updateContractor = {
   params: Joi.object().keys({
-    contractorId: Joi.string().custom(objectId).required(),
+    contractorId: Joi.string().required(),
   }),
   body: Joi.object()
     .keys({
@@ -138,7 +139,7 @@ const updateContractor = {
  */
 const deleteContractor = {
   params: Joi.object().keys({
-    contractorId: Joi.string().custom(objectId).required(),
+    contractorId: Joi.string().required(),
   }),
 };
 

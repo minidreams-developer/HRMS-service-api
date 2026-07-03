@@ -80,6 +80,10 @@ const defaultRoutes = [
     path: '/contractors',
     route: contractorRoute,
   },
+  {
+    path: '/log-work',
+    route: require('./logWork.route'),
+  },
 ];
 
 const devRoutes = [

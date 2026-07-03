@@ -140,7 +140,7 @@ const userSchema = mongoose.Schema(
       specialty:{type:String,trim:true},
       LicenseNo:{type:String,trim:true},
       dateOfJoining:{type:Date},
-      jobItems:{type:mongoose.Schema.Types.ObjectId,ref:"Contractors"}
+      jobItems:{type:mongoose.Schema.Types.ObjectId,ref:"Contractor"}
     },
 
 

@@ -20,3 +20,4 @@ module.exports.offBoardService = require('./offBoard.service');
 module.exports.overtimeManagementService = require('./overtimeManagement.service');
 module.exports.holidayService = require('./holiday.service');
 module.exports.contractorService = require('./contractor.service');
+module.exports.logWorkService = require('./logWork.service');

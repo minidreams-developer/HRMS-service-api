@@ -220,12 +220,17 @@ const queryContractors = async (filter, options) => {
 };
 
 /**
- * Get contractor by user ID
- * @param {ObjectId} id
+ * Get contractor by MongoDB _id OR employeeId (e.g. CTR-258540)
+ * @param {string} id
  * @returns {Promise<User>}
  */
 const getContractorById = async (id) => {
-  const contractor = await User.findOne({ _id: id, role: 'contractor' })
+  // Accept both MongoDB ObjectId and human-readable employeeId
+  const query = isObjectId(id.trim())
+    ? { _id: id.trim(), role: 'contractor' }
+    : { employeeId: id.trim(), role: 'contractor' };
+
+  const contractor = await User.findOne(query)
     .populate('address')
     .populate('emergencyContact')
     .populate('workInformation.jobItems');
