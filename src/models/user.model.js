@@ -6,6 +6,7 @@ const { roles } = require("../config/roles");
 const emergencyContact = require("./emergencyContact.model");
 const SalaryDetails = require("./salaryDetails.model");
 const Contractor = require("./contractors.model");
+const Commission = require('./commission.model');
 
 const userSchema = mongoose.Schema(
   {
@@ -15,6 +16,10 @@ const userSchema = mongoose.Schema(
     },
     employeeId: {
       type: String,
+    },
+    agentId:
+    {
+      type:String,
     },
     email: {
       type: String,
@@ -136,13 +141,22 @@ const userSchema = mongoose.Schema(
       SalaryDetails: { type: mongoose.Schema.Types.ObjectId, ref: "SalaryDetails" },
       userRemarks: { type: String },
       designation:{type:String, default:"employee"},
-      companyName:{type:String,required:true,trim:true},
+      companyName:{type:String,trim:true},
       specialty:{type:String,trim:true},
       LicenseNo:{type:String,trim:true},
       dateOfJoining:{type:Date},
       jobItems:{type:mongoose.Schema.Types.ObjectId,ref:"Contractor"}
     },
 
+    referenceDetails:{
+      type:String,
+    },
+
+    commissionDetails:
+    {
+      type:mongoose.Schema.Types.ObjectId,
+      ref:"Commission",
+    },
 
     approvalStatus: {
       type: String,
