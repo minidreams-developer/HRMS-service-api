@@ -1,5 +1,6 @@
 const express = require('express');
 const authRoute = require('./auth.route');
+const announcementRoute = require('./announcement.route');
 const userRoute = require('./user.route');
 const assetRoute = require('./asset.route');
 const salaryDetailsRoute = require('./salaryDetails.route');
@@ -14,6 +15,8 @@ const leaveRequestsRoute = require('./leaveRequests.route');
 const overtimeRoute = require('./overtimeManagement.route');
 const holidayRoute = require('./holiday.route');
 const contractorRoute = require('./contractor.route');
+const roleAccessRoute = require('./roleAccess.route');
+const organizationRoute = require('./organization.route');
 const docsRoute = require('./docs.route');
 const config = require('../../config/config');
 
@@ -23,6 +26,10 @@ const defaultRoutes = [
   {
     path: '/auth',
     route: authRoute,
+  },
+  {
+    path: '/announcements',
+    route: announcementRoute,
   },
   {
     path: '/users',
@@ -83,6 +90,12 @@ const defaultRoutes = [
   {
     path: '/log-work',
     route: require('./logWork.route'),
+    path: '/roles',
+    route: roleAccessRoute,
+  },
+  {
+    path: '/organizations',
+    route: organizationRoute,
   },
 ];
 

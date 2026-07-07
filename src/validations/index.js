@@ -1,4 +1,5 @@
 module.exports.authValidation = require('./auth.validation');
+module.exports.announcementValidation = require('./announcement.validation');
 module.exports.userValidation = require('./user.validation');
 module.exports.teamValidation = require('./team.validation');
 module.exports.departmentValidation = require('./department.validation');
@@ -9,3 +10,5 @@ module.exports.shiftValidation = require('./shift.validation');
 module.exports.leaveRequestsValidation = require('./leaveRequests.validation');
 module.exports.overtimeManagementValidation = require('./overtimeManagement.validation');
 module.exports.contractorValidation = require('./contractor.validation');
+module.exports.roleAccessValidation = require('./roleAccess.validation');
+module.exports.organizationValidation = require('./organization.validation');
