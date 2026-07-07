@@ -25,7 +25,7 @@ const jobItemSchema = Joi.object({
   jobItems: Joi.string().trim().required(),
   unit: Joi.string().trim().required(),
   price: Joi.number().default(0),
-  region: Joi.string().valid('headquarters', 'northRegion').required(),
+  region: Joi.string().trim(),
 });
 
 // ─── Exported validation schemas ─────────────────────────────────────────────

@@ -2,6 +2,7 @@ const httpStatus = require('http-status');
 const mongoose = require('mongoose');
 const LogWork = require('../models/logWork.model');
 const { User } = require('../models');
+const Contractor = require('../models/contractors.model');
 const ApiError = require('../utils/ApiError');
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -27,14 +28,33 @@ const computeTotals = (jobItems = []) => {
 
 /**
  * Populate branch and contractorJobItem refs on a log document.
+ * Skips population for fields that are not valid ObjectIds (Mixed type safety).
  * @param {Document} doc
  */
 const populateLog = async (doc) => {
-  await LogWork.populate(doc, [
-    { path: 'contractorId', select: 'name employeeId email' },
-    { path: 'branch', select: 'branchName' },
-    { path: 'jobItems.contractorJobItem', select: 'jobItems unit price region' },
-  ]);
+  // Only populate branch if it's a valid ObjectId
+  if (doc.branch && isObjectId(String(doc.branch))) {
+    await LogWork.populate(doc, { path: 'branch', select: 'branchName' });
+  }
+
+  // Only populate contractorJobItem entries that are valid ObjectIds
+  if (doc.jobItems && doc.jobItems.length) {
+    const validItems = doc.jobItems.filter((item) => isObjectId(String(item.contractorJobItem)));
+    if (validItems.length) {
+      await LogWork.populate(doc, {
+        path: 'jobItems.contractorJobItem',
+        select: 'jobItems unit price region',
+      });
+    }
+  }
+
+  // Always populate contractorId (stored as a real ObjectId)
+  if (doc.contractorId && isObjectId(String(doc.contractorId))) {
+    await LogWork.populate(doc, {
+      path: 'contractorId',
+      select: 'name employeeId email',
+    });
+  }
 };
 
 // ─── Create ───────────────────────────────────────────────────────────────────
@@ -65,8 +85,27 @@ const createLogWork = async (body) => {
     );
   }
 
-  // Compute totals before saving
+  // Compute totals and snapshot job names before saving
   const jobItems = body.jobItems || [];
+
+  // Fetch all referenced Contractor docs in one query to get job names
+  const contractorJobIds = jobItems
+    .map((item) => item.contractorJobItem)
+    .filter((id) => isObjectId(String(id)));
+
+  const jobTemplates = await Contractor.find({ _id: { $in: contractorJobIds } }).lean();
+  const jobTemplateMap = {};
+  for (const t of jobTemplates) {
+    jobTemplateMap[String(t._id)] = t.jobItems; // jobItems field holds the name
+  }
+
+  // Attach jobName snapshot to each line item
+  for (const item of jobItems) {
+    if (!item.jobName) {
+      item.jobName = jobTemplateMap[String(item.contractorJobItem)] || '';
+    }
+  }
+
   const grandTotal = computeTotals(jobItems);
 
   const logData = {

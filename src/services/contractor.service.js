@@ -2,6 +2,7 @@ const httpStatus = require('http-status');
 const mongoose = require('mongoose');
 const { User, Address } = require('../models');
 const Contractor = require('../models/contractors.model');
+const LogWork = require('../models/logWork.model');
 const EmergencyContact = require('../models/emergencyContact.model');
 const ApiError = require('../utils/ApiError');
 const { setPending, getPending, clearPending } = require('../utils/pendingCode');
@@ -221,8 +222,10 @@ const queryContractors = async (filter, options) => {
 
 /**
  * Get contractor by MongoDB _id OR employeeId (e.g. CTR-258540)
+ * Appends financial summary: totalEarned, payOut, outstanding (all default 0
+ * until a payment module is implemented).
  * @param {string} id
- * @returns {Promise<User>}
+ * @returns {Promise<Object>}
  */
 const getContractorById = async (id) => {
   // Accept both MongoDB ObjectId and human-readable employeeId
@@ -253,26 +256,78 @@ const getContractorById = async (id) => {
     });
   }
 
-  return contractor;
+  // ── Financial summary ────────────────────────────────────────────────────
+  // totalEarned  — sum of all approved/completed log-work grandTotals
+  // payOut       — amount already paid to the contractor
+  // outstanding  — totalEarned - payOut
+  //
+  // Payment module not yet implemented — default all to 0 for now.
+  const financialSummary = {
+    totalEarned: 0,
+    payOut: 0,
+    outstanding: 0,
+  };
+
+  // ── Log work entries for this contractor ──────────────────────────────────
+  const rawLogWork = await LogWork.find({ contractorId: contractor._id })
+    .sort({ workDoneDate: -1 })
+    .lean();
+
+  // Manually populate branch and contractorJobItem only for valid ObjectIds
+  const logWorkEntries = await Promise.all(
+    rawLogWork.map(async (log) => {
+      // Populate branch
+      if (log.branch && isObjectId(String(log.branch))) {
+        const branchDoc = await mongoose.model('Branch').findById(log.branch).select('branchName').lean();
+        log.branch = branchDoc || log.branch;
+      }
+      // Populate each job item's contractorJobItem
+      if (log.jobItems && log.jobItems.length) {
+        log.jobItems = await Promise.all(
+          log.jobItems.map(async (item) => {
+            if (item.contractorJobItem && isObjectId(String(item.contractorJobItem))) {
+              const jobDoc = await mongoose.model('Contractor')
+                .findById(item.contractorJobItem)
+                .select('jobItems unit price region')
+                .lean();
+              return { ...item, contractorJobItem: jobDoc || item.contractorJobItem };
+            }
+            return item;
+          })
+        );
+      }
+      return log;
+    })
+  );
+
+  // Convert mongoose doc to plain object and merge summary + log work
+  const contractorObj = contractor.toJSON();
+  return { ...contractorObj, ...financialSummary, logWork: logWorkEntries };
 };
 
 /**
  * Update contractor by ID
  * @param {ObjectId} contractorId
  * @param {Object} updateBody
- * @returns {Promise<User>}
+ * @returns {Promise<Object>}
  */
 const updateContractorById = async (contractorId, updateBody) => {
-  const contractor = await getContractorById(contractorId);
+  // Fetch as a raw mongoose doc (not the enriched plain object) for .save()
+  const query = isObjectId(contractorId.trim())
+    ? { _id: contractorId.trim(), role: 'contractor' }
+    : { employeeId: contractorId.trim(), role: 'contractor' };
+
+  const contractor = await User.findOne(query);
   if (!contractor) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Contractor not found');
   }
-  if (updateBody.email && (await User.isEmailTaken(updateBody.email, contractorId))) {
+  if (updateBody.email && (await User.isEmailTaken(updateBody.email, contractor._id))) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Email already taken');
   }
   Object.assign(contractor, updateBody);
   await contractor.save();
-  return contractor;
+  // Return the enriched response with financial summary
+  return getContractorById(contractorId);
 };
 
 /**
@@ -281,10 +336,16 @@ const updateContractorById = async (contractorId, updateBody) => {
  * @returns {Promise<User>}
  */
 const deleteContractorById = async (contractorId) => {
-  const contractor = await getContractorById(contractorId);
+  const query = isObjectId(contractorId.trim())
+    ? { _id: contractorId.trim(), role: 'contractor' }
+    : { employeeId: contractorId.trim(), role: 'contractor' };
+
+  const contractor = await User.findOne(query);
   if (!contractor) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Contractor not found');
   }
+  await contractor.remove();
+  return contractor;
   await contractor.remove();
   return contractor;
 };

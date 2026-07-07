@@ -10,9 +10,14 @@ const { toJSON, paginate } = require("./plugins");
 const logWorkJobItemSchema = new mongoose.Schema(
   {
     contractorJobItem: {
-      type: mongoose.Schema.Types.ObjectId,
+      type: mongoose.Schema.Types.Mixed,
       ref: "Contractor",
       required: true,
+    },
+    // Snapshot of the job name at entry time for display without always populating
+    jobName: {
+      type: String,
+      trim: true,
     },
     quantity: {
       type: Number,
@@ -48,9 +53,9 @@ const logWorkSchema = new mongoose.Schema(
       required: true,
     },
 
-    // Branch where the work was done
+    // Branch where the work was done — Mixed to accept ObjectId or string
     branch: {
-      type: mongoose.Schema.Types.ObjectId,
+      type: mongoose.Schema.Types.Mixed,
       ref: "Branch",
       required: true,
     },

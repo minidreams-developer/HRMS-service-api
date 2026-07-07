@@ -25,7 +25,7 @@ const contractorSchema = mongoose.Schema(
         region:
         {
             type:String,
-            enum:["headquarters","northRegion"]
+            trim:true,
         }
     }   
 )
