@@ -19,3 +19,5 @@ module.exports.leaderboardService = require('./leaderboard.service');
 module.exports.offBoardService = require('./offBoard.service');
 module.exports.overtimeManagementService = require('./overtimeManagement.service');
 module.exports.holidayService = require('./holiday.service');
+module.exports.roleAccessService = require('./roleAccess.service');
+module.exports.organizationService = require('./organization.service');

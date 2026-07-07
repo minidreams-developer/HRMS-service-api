@@ -17,3 +17,4 @@ module.exports.leaderboardController = require('./leaderboard.controller');
 module.exports.offBoardController = require('./offBoard.controller');
 module.exports.overtimeManagementController = require('./overtimeManagement.controller');
 module.exports.holidayController = require('./holiday.controller');
+module.exports.organizationController = require('./organization.controller');

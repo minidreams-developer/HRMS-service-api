@@ -23,6 +23,10 @@ const addressSchema = new mongoose.Schema({
     type: Number,
     trim: true,
   },
+  country: {
+    type: String,
+    trim: true,
+  },
 });
 
 addressSchema.plugin(toJSON);
