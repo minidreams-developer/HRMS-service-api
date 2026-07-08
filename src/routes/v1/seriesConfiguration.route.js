@@ -4,8 +4,14 @@ const seriesConfiguration = require('../../controllers/seriesConfiguration.contr
 const router = express.Router();
 
 router
-    .route('/')
-    .post(seriesConfiguration.createSeriesConfiguration)
-    .get(seriesConfiguration.getAllSeriesConfiguration)
+  .route('/')
+  .post(seriesConfiguration.createSeriesConfiguration)
+  .get(seriesConfiguration.getAllSeriesConfiguration);
+
+router
+  .route('/:seriesId')
+  .get(seriesConfiguration.getSeriesConfigurationById)
+  .patch(seriesConfiguration.updateSeriesConfiguration)
+  .delete(seriesConfiguration.deleteSeriesConfiguration);
 
 module.exports = router;
