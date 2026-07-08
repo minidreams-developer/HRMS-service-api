@@ -14,6 +14,7 @@ const shiftRoute = require('./shift.route');
 const leaveRequestsRoute = require('./leaveRequests.route');
 const overtimeRoute = require('./overtimeManagement.route');
 const holidayRoute = require('./holiday.route');
+const contractorRoute = require('./contractor.route');
 const roleAccessRoute = require('./roleAccess.route');
 const organizationRoute = require('./organization.route');
 const docsRoute = require('./docs.route');
@@ -83,6 +84,12 @@ const defaultRoutes = [
     route: holidayRoute,
   },
   {
+    path: '/contractors',
+    route: contractorRoute,
+  },
+  {
+    path: '/log-work',
+    route: require('./logWork.route'),
     path: '/roles',
     route: roleAccessRoute,
   },

@@ -11,6 +11,11 @@ const addressSchema = new mongoose.Schema({
     type: String,
     trim: true,
   },
+  district:
+  {
+    type:String,
+    trim:true,
+  },
   city: {
     type: String,
     trim: true,
@@ -23,10 +28,11 @@ const addressSchema = new mongoose.Schema({
     type: Number,
     trim: true,
   },
-  country: {
-    type: String,
-    trim: true,
-  },
+  country:
+  {
+    type:String,
+    trim:true,
+  }
 });
 
 addressSchema.plugin(toJSON);

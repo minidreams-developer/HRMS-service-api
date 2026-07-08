@@ -35,10 +35,17 @@ function generateShiftId() {
   return `${prefix}${randomNumber}`;
 }
 
+function generateAgentId(){
+  const prefix = "AGT";
+  const randomNumber = crypto.randomInt(100000, 999999);
+  return `${prefix}${randomNumber}`;
+}
+
 module.exports = {
   generateEmployeeId,
   generateTeamId,
   generateDepartmentId,
   generateBranchId,
   generateShiftId,
+  generateAgentId,
 };

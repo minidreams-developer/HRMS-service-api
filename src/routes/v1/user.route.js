@@ -2,7 +2,7 @@ const express = require('express');
 const userController = require('../../controllers/user.controller');
 const validate = require('../../middlewares/validate');
 const userValidation = require('../../validations/user.validation');
-
+const agentController = require('../../controllers/agent.controller');
 const router = express.Router();
 
 router
@@ -17,6 +17,11 @@ router
   .route('/')
   .post(userController.createUser)
   .get(validate(userValidation.getUsers), userController.getUsers);
+
+router
+  .route('/agent')
+  .post(agentController.createAgent)
+  .get(agentController.getAgentId);
 
 router
   .route('/:userId')

@@ -9,13 +9,14 @@ const emergencyContactSchema = new mongoose.Schema({
         type: Number,
         trim: true,
     },
-    relattionship: {
+    relationship: {
         type: String,
         trim: true,
     },
-    mobileNumber: {
-        type: Number,
-        trim: true,
+    address:
+    {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Address"
     },
 });
 
