@@ -19,6 +19,7 @@ const roleAccessRoute = require('./roleAccess.route');
 const organizationRoute = require('./organization.route');
 const docsRoute = require('./docs.route');
 const config = require('../../config/config');
+const seriesConfiguration = require('./seriesConfiguration.route');
 
 const router = express.Router();
 
@@ -90,6 +91,12 @@ const defaultRoutes = [
   {
     path: '/log-work',
     route: require('./logWork.route'),
+  },
+  {
+    path: '/day-settings',
+    route: require('./daySetting.route'),
+  },
+  {
     path: '/roles',
     route: roleAccessRoute,
   },
@@ -97,6 +104,10 @@ const defaultRoutes = [
     path: '/organizations',
     route: organizationRoute,
   },
+  {
+    path:'/seriesConfiguration',
+    route:seriesConfiguration,
+  }
 ];
 
 const devRoutes = [
