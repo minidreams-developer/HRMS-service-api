@@ -3,7 +3,10 @@ const allRoles = {
   hr_manager: [],
   team_lead: [],
   agent: [],
-  admin: ['getUsers', 'manageUsers'],
+  staff:    [],
+  manager:  ['getUsers'],
+  subAdmin: ['getUsers', 'manageUsers'],
+  admin:    ['getUsers', 'manageUsers'],
 };
 
 const roles = Object.keys(allRoles);
