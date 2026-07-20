@@ -144,13 +144,98 @@ const populateWorkInfo = async (docs) => {
 };
 
 /**
- * Query for users
- * @param {Object} filter - Mongo filter
- * @param {Object} options - Query options
- * @returns {Promise<QueryResult>}
+ * Query for users with advanced filter support.
+ * Advanced filters: departmentId, designation, shiftId, status, joinedFrom, joinedTo, sortBy
  */
-const queryUsers = async (filter, options) => {
-  const result = await User.paginate(filter, options);
+const queryUsers = async (filter, options, advancedFilters = {}) => {
+  // ── Build the MongoDB filter ────────────────────────────────────────────
+  const mongoFilter = {};
+
+  // Basic direct-field filters
+  if (filter.name) {
+    mongoFilter.name = { $regex: filter.name, $options: 'i' };
+  }
+  if (filter.role)       mongoFilter.role       = filter.role;
+  if (filter.employeeId) mongoFilter.employeeId = filter.employeeId;
+
+  // Department filter — workInformation.department stores Mixed (ObjectId or object)
+  if (advancedFilters.departmentId && isObjectId(advancedFilters.departmentId)) {
+    mongoFilter['workInformation.department'] = new mongoose.Types.ObjectId(advancedFilters.departmentId);
+  }
+
+  // Designation filter — case-insensitive partial match
+  if (advancedFilters.designation) {
+    mongoFilter['workInformation.designation'] = {
+      $regex: advancedFilters.designation,
+      $options: 'i',
+    };
+  }
+
+  // Shift filter — workInformation.shiftId stores Mixed (ObjectId or object)
+  if (advancedFilters.shiftId && isObjectId(advancedFilters.shiftId)) {
+    mongoFilter['workInformation.shiftId'] = new mongoose.Types.ObjectId(advancedFilters.shiftId);
+  }
+
+  // Status filter — maps UI labels to actual model fields
+  // Active   → isActive: true,  approvalStatus: 'approved'
+  // Inactive → isActive: false
+  // Relieved → approvalStatus: 'rejected'
+  if (advancedFilters.status) {
+    const s = advancedFilters.status.toLowerCase();
+    if (s === 'active') {
+      mongoFilter.isActive       = true;
+      mongoFilter.approvalStatus = 'approved';
+    } else if (s === 'inactive') {
+      mongoFilter.isActive = false;
+    } else if (s === 'relieved') {
+      mongoFilter.approvalStatus = 'rejected';
+    }
+  }
+
+  // Date Range filter — joined date (workInformation.joinedDate)
+  if (advancedFilters.joinedFrom || advancedFilters.joinedTo) {
+    mongoFilter['workInformation.joinedDate'] = {};
+    if (advancedFilters.joinedFrom) {
+      mongoFilter['workInformation.joinedDate'].$gte = new Date(advancedFilters.joinedFrom);
+    }
+    if (advancedFilters.joinedTo) {
+      // Include the full end day
+      const endDate = new Date(advancedFilters.joinedTo);
+      endDate.setUTCHours(23, 59, 59, 999);
+      mongoFilter['workInformation.joinedDate'].$lte = endDate;
+    }
+  }
+
+  // ── Build sort options ──────────────────────────────────────────────────
+  // Supports field:asc / field:desc AND the Sort By panel values:
+  //   date → workInformation.joinedDate, name → name, status → isActive, amount → (not applicable for users)
+  const buildSort = (sortByStr) => {
+    if (!sortByStr) return undefined;
+    const sortMap = {
+      date:   'workInformation.joinedDate',
+      name:   'name',
+      status: 'isActive',
+      amount: 'name', // fallback for users — no salary field on User directly
+    };
+    const parts = sortByStr.split(',').map((s) => {
+      const [rawKey, order] = s.split(':');
+      const key = sortMap[rawKey.toLowerCase()] || rawKey;
+      return `${key}:${order || 'asc'}`;
+    });
+    return parts.join(',');
+  };
+
+  const paginateOptions = {
+    limit:  parseInt(options.limit, 10) > 0 ? parseInt(options.limit, 10) : 10,
+    page:   parseInt(options.page,  10) > 0 ? parseInt(options.page,  10) : 1,
+  };
+  if (options.sortBy) {
+    paginateOptions.sortBy = buildSort(options.sortBy);
+  }
+
+  // ── Run paginated query ─────────────────────────────────────────────────
+  const result = await User.paginate(mongoFilter, paginateOptions);
+
   await User.populate(result.results, [
     { path: 'address' },
     { path: 'emergencyContact' },

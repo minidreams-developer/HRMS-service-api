@@ -23,3 +23,7 @@ module.exports.contractorService = require('./contractor.service');
 module.exports.logWorkService = require('./logWork.service');
 module.exports.roleAccessService = require('./roleAccess.service');
 module.exports.organizationService = require('./organization.service');
+module.exports.payrollService = require('./payroll.service');
+module.exports.paysheetService = require('./paysheet.service');
+module.exports.dashboardService = require('./dashboard.service');
+module.exports.hierarchyService = require('./hierarchy.service');

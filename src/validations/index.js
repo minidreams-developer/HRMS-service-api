@@ -12,3 +12,7 @@ module.exports.overtimeManagementValidation = require('./overtimeManagement.vali
 module.exports.contractorValidation = require('./contractor.validation');
 module.exports.roleAccessValidation = require('./roleAccess.validation');
 module.exports.organizationValidation = require('./organization.validation');
+module.exports.payrollValidation = require('./payroll.validation');
+module.exports.paysheetValidation = require('./paysheet.validation');
+module.exports.dashboardValidation = require('./dashboard.validation');
+module.exports.hierarchyValidation = require('./hierarchy.validation');

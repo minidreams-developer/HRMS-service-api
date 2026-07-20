@@ -1,6 +1,9 @@
 const Joi = require('joi');
 const { password, objectId } = require('./custom.validation');
 
+// Roles must stay in sync with src/config/roles.js
+const ROLES = ['employee', 'hr_manager', 'team_lead', 'agent', 'staff', 'manager', 'subAdmin', 'admin', 'contractor'];
+
 const registerEmployee = {
   body: Joi.object().unknown(true),
 };
@@ -16,13 +19,33 @@ const createUser = {
 
 const getUsers = {
   query: Joi.object().keys({
-    name: Joi.string(),
-    role: Joi.string(),
-    empId: Joi.string(),
-    distinct: Joi.string().valid('department','role','status'),
-    sortBy: Joi.string(),
-    limit: Joi.number().integer(),
-    page: Joi.number().integer(),
+    // Basic filters
+    name:         Joi.string().optional(),
+    role:         Joi.string().valid(...ROLES).optional(),
+    empId:        Joi.string().optional(),
+
+    // Department filter (Select Department panel)
+    departmentId: Joi.string().custom(objectId).optional(),
+
+    // Designations filter (Select Designations panel)
+    designation:  Joi.string().optional(),
+
+    // Shift filter (Select Shift panel)
+    shiftId:      Joi.string().custom(objectId).optional(),
+
+    // Status filter — Active | Inactive | Relieved
+    status:       Joi.string().valid('active', 'inactive', 'relieved').optional(),
+
+    // Date Range filter (joined date From / To)
+    joinedFrom:   Joi.date().iso().optional(),
+    joinedTo:     Joi.date().iso().optional(),
+
+    // Sort By — date | name | status | amount
+    sortBy:       Joi.string().optional(),
+
+    // Pagination
+    limit:        Joi.number().integer().min(1).max(100).optional(),
+    page:         Joi.number().integer().min(1).optional(),
   }),
 };
 

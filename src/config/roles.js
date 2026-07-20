@@ -3,6 +3,10 @@ const allRoles = {
   hr_manager: [],
   team_lead: [],
   agent: [],
+  staff:    [],
+  manager:  ['getUsers'],
+  subAdmin: ['getUsers', 'manageUsers'],
+  admin:    ['getUsers', 'manageUsers'],
   admin: ['getUsers', 'manageUsers'],
   contractor:[],
 };
