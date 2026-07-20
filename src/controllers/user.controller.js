@@ -101,14 +101,23 @@ const createUser = catchAsync(async (req, res) => {
 });
 
 const getUsers = catchAsync(async (req, res) => {
-  const filter = pick(req.query, ['name', 'role']);
+  const filter  = pick(req.query, ['name', 'role']);
   const options = pick(req.query, ['sortBy', 'limit', 'page']);
 
-  if (req.query.empId) {
-    filter.employeeId = req.query.empId;
-  }
+  // Basic filters passed directly to queryUsers
+  if (req.query.empId)       filter.employeeId = req.query.empId;
 
-  const result = await userService.queryUsers(filter, options);
+  // Advanced filters that need special handling in the service
+  const advancedFilters = {
+    departmentId:  req.query.departmentId  || null,
+    designation:   req.query.designation   || null,
+    shiftId:       req.query.shiftId       || null,
+    status:        req.query.status        || null,   // active | inactive | relieved
+    joinedFrom:    req.query.joinedFrom    || null,   // ISO date
+    joinedTo:      req.query.joinedTo      || null,   // ISO date
+  };
+
+  const result = await userService.queryUsers(filter, options, advancedFilters);
   res.send(result);
 });
 

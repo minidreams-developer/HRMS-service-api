@@ -19,3 +19,7 @@ module.exports.overtimeManagementController = require('./overtimeManagement.cont
 module.exports.holidayController = require('./holiday.controller');
 module.exports.contractorController = require('./contractor.controller');
 module.exports.organizationController = require('./organization.controller');
+module.exports.payrollController = require('./payroll.controller');
+module.exports.paysheetController = require('./paysheet.controller');
+module.exports.dashboardController = require('./dashboard.controller');
+module.exports.hierarchyController = require('./hierarchy.controller');

@@ -17,6 +17,10 @@ const holidayRoute = require('./holiday.route');
 const contractorRoute = require('./contractor.route');
 const roleAccessRoute = require('./roleAccess.route');
 const organizationRoute = require('./organization.route');
+const payrollRoute = require('./payroll.route');
+const paysheetRoute = require('./paysheet.route');
+const dashboardRoute = require('./dashboard.route');
+const hierarchyRoute = require('./hierarchy.route');
 const docsRoute = require('./docs.route');
 const config = require('../../config/config');
 
@@ -90,12 +94,30 @@ const defaultRoutes = [
   {
     path: '/log-work',
     route: require('./logWork.route'),
+  },
+  {
     path: '/roles',
     route: roleAccessRoute,
   },
   {
     path: '/organizations',
     route: organizationRoute,
+  },
+  {
+    path: '/payroll',
+    route: payrollRoute,
+  },
+  {
+    path: '/paysheets',
+    route: paysheetRoute,
+  },
+  {
+    path: '/dashboard',
+    route: dashboardRoute,
+  },
+  {
+    path: '/hierarchy',
+    route: hierarchyRoute,
   },
 ];
 
