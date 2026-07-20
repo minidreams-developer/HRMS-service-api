@@ -129,8 +129,8 @@ const defaultRoutes = [
     route: hierarchyRoute,
   },
   {
-    path:'/seriesConfiguration',
-    route:seriesConfiguration,
+    path: '/seriesConfiguration',
+    route: seriesConfiguration,
   }
 ];
 
