@@ -19,6 +19,7 @@ const getUsers = {
     name: Joi.string(),
     role: Joi.string(),
     empId: Joi.string(),
+    distinct: Joi.string().valid('department','role','status'),
     sortBy: Joi.string(),
     limit: Joi.number().integer(),
     page: Joi.number().integer(),

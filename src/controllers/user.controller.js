@@ -101,6 +101,23 @@ const createUser = catchAsync(async (req, res) => {
 });
 
 const getUsers = catchAsync(async (req, res) => {
+  // ?distinct=department → return unique department names only
+  if (req.query.distinct === 'department') {
+    const departments = await userService.getDistinctDepartments();
+    return res.send({ departments });
+  }
+  else if(req.query.distinct === 'role')
+  {
+    const roles = await userService.getDistinctroles();
+    return res.send({roles});
+  }
+
+  // else if(req.params.distinct === 'status')
+  // {
+  //   const status = await userService.getDistinctStatus();
+  //   return res.send(status)
+  // }
+
   const filter = pick(req.query, ['name', 'role']);
   const options = pick(req.query, ['sortBy', 'limit', 'page']);
 
