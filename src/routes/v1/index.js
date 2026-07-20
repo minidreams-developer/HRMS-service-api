@@ -23,6 +23,7 @@ const dashboardRoute = require('./dashboard.route');
 const hierarchyRoute = require('./hierarchy.route');
 const docsRoute = require('./docs.route');
 const config = require('../../config/config');
+const seriesConfiguration = require('./seriesConfiguration.route');
 
 const router = express.Router();
 
@@ -96,6 +97,10 @@ const defaultRoutes = [
     route: require('./logWork.route'),
   },
   {
+    path: '/day-settings',
+    route: require('./daySetting.route'),
+  },
+  {
     path: '/roles',
     route: roleAccessRoute,
   },
@@ -123,6 +128,10 @@ const defaultRoutes = [
     path: '/hierarchy',
     route: hierarchyRoute,
   },
+  {
+    path:'/seriesConfiguration',
+    route:seriesConfiguration,
+  }
 ];
 
 const devRoutes = [

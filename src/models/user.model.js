@@ -8,6 +8,8 @@ const SalaryDetails = require("./salaryDetails.model");
 const Contractor = require("./contractors.model");
 const Commission = require('./commission.model');
 
+const Status = ['Active','In-Active','Relieved'];
+
 const userSchema = mongoose.Schema(
   {
     name: {
@@ -178,7 +180,8 @@ const userSchema = mongoose.Schema(
       default: false,
     },
     isActive: {
-      type: Boolean,
+      type: String,
+      enum: Status,
       default: true,
     },
   },

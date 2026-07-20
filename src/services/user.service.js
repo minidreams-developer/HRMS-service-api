@@ -4,6 +4,7 @@ const EmergencyContact = require('../models/emergencyContact.model');
 const ApiError = require('../utils/ApiError');
 const { generateEmployeeId: generateId } = require('../utils/employeeId');
 const { setPending, getPending, clearPending } = require('../utils/pendingCode');
+const mongoose = require('mongoose');
 
 const EMP_ID_KEY = 'employeeId';
 
@@ -109,9 +110,6 @@ const createUser = async (userBody) => {
   }
   return User.create(userBody);
 };
-
-const mongoose = require('mongoose');
-
 const isObjectId = (val) => mongoose.Types.ObjectId.isValid(val) && String(new mongoose.Types.ObjectId(val)) === String(val);
 
 /**
@@ -334,6 +332,56 @@ const generateEmployeeId = async () => {
   return employeeId;
 };
 
+/**
+ * Get distinct department names.
+ * Queries the Department collection directly for all department names,
+ * then also picks up any plain-string department values stored on users.
+ * @returns {Promise<string[]>}
+ */
+const getDistinctDepartments = async () => {
+  // 1. Get all department names from the Department collection
+  const deptDocs = await mongoose.model('Department')
+    .find({}, 'departmentName')
+    .lean();
+
+  const fromDeptCollection = deptDocs
+    .map((d) => d.departmentName)
+    .filter(Boolean);
+
+  // 2. Also pick up any plain-string values stored directly on users
+  const plainStrings = await User.distinct('workInformation.department', {
+    'workInformation.department': { $type: 'string' },
+  });
+
+  // console.log(deptDocs);
+  // console.log(plainStrings);
+  // Merge and deduplicate
+  const all = [...new Set([...fromDeptCollection, ...plainStrings.filter(Boolean)])];
+  // console.log(all);
+  all.sort();
+  return all;
+};
+
+const getDistinctroles = async() =>
+{
+  const roles = await mongoose.model('User')
+  .find({},'role')
+  .lean();
+
+  const fromUserCollection = roles
+  .map((d)=>d.role)
+  .filter(Boolean);
+
+  const designation = [...new Set(fromUserCollection)];
+
+  return designation;
+}
+
+// const getDistinctStatus = async()=>
+// {
+//   const status = mongoose.model('User') 
+// }
+
 module.exports = {
   registerEmployee,
   createUser,
@@ -343,4 +391,6 @@ module.exports = {
   updateUserById,
   deleteUserById,
   generateEmployeeId,
+  getDistinctDepartments,
+  getDistinctroles,
 };
