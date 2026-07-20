@@ -20,6 +20,7 @@ module.exports.Overtime = require('./overtimeManagement.model');
 module.exports.Holiday = require('./holidays.model');
 module.exports.Contractor = require('./contractors.model');
 module.exports.LogWork = require('./logWork.model');
+module.exports.Adjustment = require('./adjustment.model');
 module.exports.Role = require('./roleAccess.model');
 module.exports.Organization = require('./organization.model');
 module.exports.Payroll = require('./payroll.model');
