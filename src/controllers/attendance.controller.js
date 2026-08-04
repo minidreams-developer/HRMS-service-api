@@ -10,9 +10,9 @@ const createAttendance = catchAsync(async (req, res) => {
 });
 
 const getAttendances = catchAsync(async (req, res) => {
-  const filter = pick(req.query, ['employeeId', 'date', 'shiftId', 'attendanceStatus']);
+  const filter  = pick(req.query, ['search', 'employeeId', 'shiftId', 'date', 'attendanceStatus', 'fromDate', 'toDate']);
   const options = pick(req.query, ['sortBy', 'limit', 'page']);
-  const result = await attendanceService.queryAttendances(filter, options);
+  const result  = await attendanceService.queryAttendances(filter, options);
   res.send(result);
 });
 

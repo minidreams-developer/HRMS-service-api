@@ -18,11 +18,21 @@ const createAnnouncement = {
 
 const getAnnouncements = {
   query: Joi.object().keys({
-    title:   Joi.string(),
-    search:  Joi.string(),
-    sortBy:  Joi.string(),
-    limit:   Joi.number().integer().min(1),
-    page:    Joi.number().integer().min(1),
+    // exact title match
+    title:    Joi.string(),
+    // free-text search across title, description, content
+    search:   Joi.string(),
+    // date range filter on scheduleDateAndTime
+    fromDate: Joi.date().iso().optional(),
+    toDate:   Joi.date().iso().optional().when('fromDate', {
+      is:        Joi.exist(),
+      then:      Joi.date().iso().min(Joi.ref('fromDate')),
+      otherwise: Joi.date().iso(),
+    }),
+    // pagination / sorting
+    sortBy:   Joi.string(),
+    limit:    Joi.number().integer().min(1),
+    page:     Joi.number().integer().min(1),
   }),
 };
 

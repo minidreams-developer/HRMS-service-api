@@ -14,12 +14,17 @@ const createTeam = {
 
 const getTeams = {
   query: Joi.object().keys({
-    teamName: Joi.string(),
-    teamCode: Joi.string(),
-    teamLead: Joi.string(),
-    sortBy: Joi.string(),
-    limit: Joi.number().integer(),
-    page: Joi.number().integer(),
+    // free-text search across teamName, teamCode, teamDescription
+    search:       Joi.string().optional(),
+    // exact / partial filters
+    teamName:     Joi.string().optional(),
+    teamCode:     Joi.string().optional(),
+    teamLead:     Joi.string().optional(),
+    departmentId: Joi.string().custom(objectId).optional(),
+    // pagination & sorting
+    sortBy:       Joi.string().optional(),
+    limit:        Joi.number().integer().min(1).optional(),
+    page:         Joi.number().integer().min(1).optional(),
   }),
 };
 

@@ -34,10 +34,19 @@ const createOffBoard = {
 
 const getOffBoards = {
   query: Joi.object().keys({
-    userId: Joi.string().custom(objectId),
-    sortBy: Joi.string(),
-    limit: Joi.number().integer(),
-    page: Joi.number().integer(),
+    // filter by specific user
+    userId:          Joi.string().custom(objectId).optional(),
+    // search across linked user's name, email, employeeId
+    search:          Joi.string().optional(),
+    // exit type filter
+    exitType:        Joi.string().optional(),
+    // last working date range
+    lastWorkingFrom: Joi.date().iso().optional(),
+    lastWorkingTo:   Joi.date().iso().optional(),
+    // pagination & sorting
+    sortBy:          Joi.string().optional(),
+    limit:           Joi.number().integer().min(1).optional(),
+    page:            Joi.number().integer().min(1).optional(),
   }),
 };
 

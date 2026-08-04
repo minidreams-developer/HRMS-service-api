@@ -10,9 +10,9 @@ const createLeaveRequests = catchAsync(async (req, res) => {
 });
 
 const getLeaveRequests = catchAsync(async (req, res) => {
-  const filter = pick(req.query, ['employeeId', 'leaveType', 'status']);
+  const filter  = pick(req.query, ['search', 'employeeId', 'leaveType', 'status', 'departmentId', 'fromDate', 'toDate']);
   const options = pick(req.query, ['sortBy', 'limit', 'page']);
-  const result = await leaveRequestsService.queryLeaveRequests(filter, options);
+  const result  = await leaveRequestsService.queryLeaveRequests(filter, options);
   res.send(result);
 });
 

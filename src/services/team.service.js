@@ -21,16 +21,51 @@ const createTeam = async (body) => {
 };
 
 /**
- * Query for teams
- * @param {Object} filter - Mongo filter
- * @param {Object} options - Query options
- * @param {string} [options.sortBy] - Sort option in the format: sortField:(desc|asc)
- * @param {number} [options.limit] - Maximum number of results per page (default = 10)
- * @param {number} [options.page] - Current page (default = 1)
+ * Query for teams with search and filter support.
+ *
+ * Filter keys:
+ *   search       — case-insensitive regex across teamName, teamCode, teamDescription
+ *   teamName     — partial case-insensitive match
+ *   teamCode     — exact match
+ *   teamLead     — exact match (ObjectId string)
+ *   departmentId — exact ObjectId match on department field
+ *
+ * @param {Object} filter
+ * @param {Object} options - sortBy, limit, page
  * @returns {Promise<QueryResult>}
  */
 const queryTeams = async (filter, options) => {
-  const result = await Team.paginate(filter, options);
+  const mongoFilter = {};
+
+  // Free-text search across name, code and description
+  if (filter.search) {
+    const regex = { $regex: filter.search, $options: 'i' };
+    mongoFilter.$or = [
+      { teamName:        regex },
+      { teamCode:        regex },
+      { teamDescription: regex },
+    ];
+  }
+
+  // Exact / partial field filters (only applied when search is not set)
+  if (!filter.search) {
+    if (filter.teamName) {
+      mongoFilter.teamName = { $regex: filter.teamName, $options: 'i' };
+    }
+    if (filter.teamCode) {
+      mongoFilter.teamCode = filter.teamCode;
+    }
+    if (filter.teamLead) {
+      mongoFilter.teamLead = filter.teamLead;
+    }
+  }
+
+  // Department filter
+  if (filter.departmentId) {
+    mongoFilter.department = filter.departmentId;
+  }
+
+  const result = await Team.paginate(mongoFilter, options);
   await Team.populate(result.results, { path: 'department', select: 'departmentName' });
   await Team.populate(result.results, { path: 'teamLead', select: 'name' });
   result.results = result.results.map((team) => {

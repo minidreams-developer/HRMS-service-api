@@ -13,19 +13,44 @@ const createAnnouncement = async (body) => {
 
 /**
  * Query announcements with pagination, filtering, and text search.
- * `search` matches against title, description, and content (case-insensitive).
- * @param {Object} filter
- * @param {Object} options - sortBy, limit, page
+ *
+ * Supported filter keys:
+ *   - search   : case-insensitive regex across title, description, content
+ *   - title    : exact (case-insensitive) title match
+ *   - fromDate : scheduleDateAndTime >= fromDate
+ *   - toDate   : scheduleDateAndTime <= toDate
+ *
+ * @param {Object} filter   - { search?, title?, fromDate?, toDate? }
+ * @param {Object} options  - { sortBy?, limit?, page? }
  * @returns {Promise<QueryResult>}
  */
 const queryAnnouncements = async (filter, options) => {
+  const query = {};
+
+  // Free-text search across title, description, content
   if (filter.search) {
     const regex = new RegExp(filter.search, 'i');
-    filter.$or = [{ title: regex }, { description: regex }, { content: regex }];
-    delete filter.search;
+    query.$or = [{ title: regex }, { description: regex }, { content: regex }];
   }
 
-  return Announcement.paginate(filter, options);
+  // Exact title filter (takes precedence over search when both are given)
+  if (filter.title) {
+    query.title = new RegExp(filter.title, 'i');
+  }
+
+  // Date range on scheduleDateAndTime
+  if (filter.fromDate || filter.toDate) {
+    query.scheduleDateAndTime = {};
+    if (filter.fromDate) query.scheduleDateAndTime.$gte = new Date(filter.fromDate);
+    if (filter.toDate)   query.scheduleDateAndTime.$lte = new Date(filter.toDate);
+  }
+
+  // Default sort: newest scheduled first
+  if (!options.sortBy) {
+    options.sortBy = 'scheduleDateAndTime:desc';
+  }
+
+  return Announcement.paginate(query, options);
 };
 
 /**

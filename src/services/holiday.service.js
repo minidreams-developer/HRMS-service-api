@@ -12,13 +12,60 @@ const createHoliday = async (body) => {
 };
 
 /**
- * Query holidays
+ * Query holidays with search and filter support.
+ *
+ * Filter keys:
+ *   search       — case-insensitive regex across holidayTitle, description, Remarks
+ *   holidayTitle — partial case-insensitive match
+ *   month        — exact month number (1-12)
+ *   status       — boolean (true = active)
+ *   fromDate     — holiday date >= fromDate
+ *   toDate       — holiday date <= toDate
+ *
  * @param {Object} filter
- * @param {Object} options
+ * @param {Object} options - sortBy, limit, page
  * @returns {Promise<QueryResult>}
  */
 const queryHolidays = async (filter, options) => {
-  return Holiday.paginate(filter, options);
+  const mongoFilter = {};
+
+  // Free-text search across title, description, remarks
+  if (filter.search) {
+    const regex = { $regex: filter.search, $options: 'i' };
+    mongoFilter.$or = [
+      { holidayTitle: regex },
+      { description:  regex },
+      { Remarks:      regex },
+    ];
+  }
+
+  // Individual field filters (only when search is not active)
+  if (!filter.search && filter.holidayTitle) {
+    mongoFilter.holidayTitle = { $regex: filter.holidayTitle, $options: 'i' };
+  }
+
+  // Month filter — always applied alongside search
+  if (filter.month !== undefined && filter.month !== null && filter.month !== '') {
+    mongoFilter.month = Number(filter.month);
+  }
+
+  // Status filter — always applied alongside search
+  if (filter.status !== undefined && filter.status !== null && filter.status !== '') {
+    mongoFilter.status = filter.status === true || filter.status === 'true';
+  }
+
+  // Date range on holiday date
+  if (filter.fromDate || filter.toDate) {
+    mongoFilter.date = {};
+    if (filter.fromDate) mongoFilter.date.$gte = new Date(filter.fromDate);
+    if (filter.toDate) {
+      const end = new Date(filter.toDate);
+      end.setUTCHours(23, 59, 59, 999);
+      mongoFilter.date.$lte = end;
+    }
+  }
+
+  return Holiday.paginate(mongoFilter, options);
 };
 
 /**

@@ -10,9 +10,9 @@ const createOvertime = catchAsync(async (req, res) => {
 });
 
 const getOvertime = catchAsync(async (req, res) => {
-  const filter = pick(req.query, ['employeeId', 'status']);
+  const filter  = pick(req.query, ['search', 'employeeId', 'status', 'fromDate', 'toDate']);
   const options = pick(req.query, ['sortBy', 'limit', 'page']);
-  const result = await overtimeManagementService.queryOvertime(filter, options);
+  const result  = await overtimeManagementService.queryOvertime(filter, options);
   res.send(result);
 });
 

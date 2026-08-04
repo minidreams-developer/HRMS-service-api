@@ -10,9 +10,9 @@ const createHoliday = catchAsync(async (req, res) => {
 });
 
 const getHolidays = catchAsync(async (req, res) => {
-  const filter = pick(req.query, ['holidayTitle', 'month', 'status']);
+  const filter  = pick(req.query, ['search', 'holidayTitle', 'month', 'status', 'fromDate', 'toDate']);
   const options = pick(req.query, ['sortBy', 'limit', 'page']);
-  const result = await holidayService.queryHolidays(filter, options);
+  const result  = await holidayService.queryHolidays(filter, options);
   res.send(result);
 });
 

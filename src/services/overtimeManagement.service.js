@@ -59,9 +59,18 @@ const buildLookupStages = () => [
 ];
 
 /**
- * Query overtime records with employee name, department name and status
+ * Query overtime records with search, status, date range and employee filters.
+ *
+ * Filter keys:
+ *   search     — regex across linked user's name, email, employeeId
+ *   employeeId — exact ObjectId match
+ *   status     — 'pending' | 'approved'
+ *   fromDate   — OvertimeDate >= fromDate
+ *   toDate     — OvertimeDate <= toDate
  */
 const queryOvertime = async (filter, options) => {
+  const { User } = require('../models');
+
   const limit = options.limit && parseInt(options.limit, 10) > 0 ? parseInt(options.limit, 10) : 10;
   const page  = options.page  && parseInt(options.page,  10) > 0 ? parseInt(options.page,  10) : 1;
   const skip  = (page - 1) * limit;
@@ -75,9 +84,39 @@ const queryOvertime = async (filter, options) => {
     });
   }
 
-  const matchStage = { ...filter };
-  if (matchStage.employeeId && typeof matchStage.employeeId === 'string') {
-    matchStage.employeeId = new mongoose.Types.ObjectId(matchStage.employeeId);
+  // ── Build $match stage ──────────────────────────────────────────────────
+  const matchStage = {};
+
+  // Search — resolve user IDs first, then scope overtime records
+  if (filter.search) {
+    const regex = { $regex: filter.search, $options: 'i' };
+    const matchedUsers = await User.find(
+      { $or: [{ name: regex }, { email: regex }, { employeeId: regex }] },
+      { _id: 1 }
+    ).lean();
+    const userIds = matchedUsers.map((u) => u._id);
+    matchStage.employeeId = { $in: userIds };
+  }
+
+  // Direct employeeId filter
+  if (filter.employeeId && !filter.search) {
+    matchStage.employeeId = new mongoose.Types.ObjectId(filter.employeeId);
+  }
+
+  // Status filter
+  if (filter.status) {
+    matchStage.status = filter.status;
+  }
+
+  // OvertimeDate range
+  if (filter.fromDate || filter.toDate) {
+    matchStage.OvertimeDate = {};
+    if (filter.fromDate) matchStage.OvertimeDate.$gte = new Date(filter.fromDate);
+    if (filter.toDate) {
+      const end = new Date(filter.toDate);
+      end.setUTCHours(23, 59, 59, 999);
+      matchStage.OvertimeDate.$lte = end;
+    }
   }
 
   const pipeline = [{ $match: matchStage }, ...buildLookupStages(), { $sort: sort }];

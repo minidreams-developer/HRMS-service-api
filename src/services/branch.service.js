@@ -1,10 +1,14 @@
 const httpStatus = require('http-status');
+const mongoose = require('mongoose');
 const { Branch } = require('../models');
 const ApiError = require('../utils/ApiError');
 const { generateBranchId } = require('../utils/employeeId');
 const { setPending, getPending, clearPending } = require('../utils/pendingCode');
 
 const BRANCH_CODE_KEY = 'branchNumber';
+
+const isValidObjectId = (val) =>
+  mongoose.Types.ObjectId.isValid(val) && String(new mongoose.Types.ObjectId(val)) === String(val);
 
 /**
  * Create a branch — clears the pending branchNumber once saved
@@ -20,18 +24,57 @@ const createBranch = async (body) => {
 };
 
 /**
- * Query for branches
- * @param {Object} filter - Mongo filter
- * @param {Object} options - Query options
+ * Query for branches with search and filter support.
+ *
+ * Filter keys:
+ *   search       — case-insensitive regex across branchName, branchNumber, city, state
+ *   branchName   — partial case-insensitive match
+ *   branchNumber — exact match
+ *   branchStatus — 'active' | 'inactive'
+ *   branchType   — partial case-insensitive match
+ *   city         — partial case-insensitive match
+ *   state        — partial case-insensitive match
+ *
+ * @param {Object} filter
+ * @param {Object} options - sortBy, limit, page
  * @returns {Promise<QueryResult>}
  */
-const mongoose = require('mongoose');
-
-const isValidObjectId = (val) => mongoose.Types.ObjectId.isValid(val) && String(new mongoose.Types.ObjectId(val)) === String(val);
-
 const queryBranches = async (filter, options) => {
-  const result = await Branch.paginate(filter, options);
-  // Only populate documents where branchHead is a valid ObjectId
+  const mongoFilter = {};
+
+  // Free-text search across key fields
+  if (filter.search) {
+    const regex = { $regex: filter.search, $options: 'i' };
+    mongoFilter.$or = [
+      { branchName:   regex },
+      { branchNumber: regex },
+      { city:         regex },
+      { state:        regex },
+    ];
+  }
+
+  // Individual field filters (only when search is not active)
+  if (!filter.search) {
+    if (filter.branchName) {
+      mongoFilter.branchName = { $regex: filter.branchName, $options: 'i' };
+    }
+    if (filter.branchNumber) {
+      mongoFilter.branchNumber = filter.branchNumber;
+    }
+    if (filter.city) {
+      mongoFilter.city = { $regex: filter.city, $options: 'i' };
+    }
+    if (filter.state) {
+      mongoFilter.state = { $regex: filter.state, $options: 'i' };
+    }
+  }
+
+  if (filter.branchStatus) mongoFilter.branchStatus = filter.branchStatus;
+  if (filter.branchType)   mongoFilter.branchType   = { $regex: filter.branchType, $options: 'i' };
+
+  const result = await Branch.paginate(mongoFilter, options);
+
+  // Only populate branchHead where value is a valid ObjectId
   const toPopulate = result.results.filter((b) => isValidObjectId(b.branchHead));
   if (toPopulate.length) {
     await Branch.populate(toPopulate, { path: 'branchHead', select: 'name' });

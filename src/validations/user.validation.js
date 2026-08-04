@@ -19,31 +19,35 @@ const createUser = {
 
 const getUsers = {
   query: Joi.object().keys({
-    // Basic filters
+    // ── Distinct helper ─────────────────────────────────────────────────────
+    distinct:     Joi.string().valid('department', 'role').optional(),
+
+    // ── Free-text search ────────────────────────────────────────────────────
+    // Matches name, email, or employeeId (case-insensitive)
+    search:       Joi.string().optional(),
+
+    // ── Basic field filters ─────────────────────────────────────────────────
     name:         Joi.string().optional(),
     role:         Joi.string().valid(...ROLES).optional(),
     empId:        Joi.string().optional(),
+    gender:       Joi.string().valid('male', 'female', 'other').optional(),
 
-    // Department filter (Select Department panel)
+    // ── Work-information filters ─────────────────────────────────────────────
     departmentId: Joi.string().custom(objectId).optional(),
-
-    // Designations filter (Select Designations panel)
+    teamId:       Joi.string().custom(objectId).optional(),
+    branchId:     Joi.string().custom(objectId).optional(),
     designation:  Joi.string().optional(),
-
-    // Shift filter (Select Shift panel)
     shiftId:      Joi.string().custom(objectId).optional(),
 
-    // Status filter — Active | Inactive | Relieved
-    status:       Joi.string().valid('active', 'inactive', 'relieved').optional(),
+    // ── Status filter — Active | In-Active | Relieved ────────────────────────
+    status:       Joi.string().valid('Active', 'In-Active', 'Relieved').optional(),
 
-    // Date Range filter (joined date From / To)
+    // ── Joined-date range ────────────────────────────────────────────────────
     joinedFrom:   Joi.date().iso().optional(),
     joinedTo:     Joi.date().iso().optional(),
 
-    // Sort By — date | name | status | amount
+    // ── Sorting & pagination ─────────────────────────────────────────────────
     sortBy:       Joi.string().optional(),
-
-    // Pagination
     limit:        Joi.number().integer().min(1).max(100).optional(),
     page:         Joi.number().integer().min(1).optional(),
   }),

@@ -10,9 +10,9 @@ const createShift = catchAsync(async (req, res) => {
 });
 
 const getShifts = catchAsync(async (req, res) => {
-  const filter = pick(req.query, ['shiftName', 'shiftCode', 'shiftType', 'isShiftActive', 'userId']);
+  const filter  = pick(req.query, ['search', 'shiftName', 'shiftCode', 'shiftType', 'isShiftActive', 'userId']);
   const options = pick(req.query, ['sortBy', 'limit', 'page']);
-  const result = await shiftService.queryShifts(filter, options);
+  const result  = await shiftService.queryShifts(filter, options);
   res.send(result);
 });
 

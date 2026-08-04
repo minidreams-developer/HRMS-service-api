@@ -29,10 +29,67 @@ const createAttendance = async (body) => {
 };
 
 /**
- * Query for attendances
+ * Query for attendances with search and filter support.
+ *
+ * Filter keys:
+ *   search           — regex across linked user's name, email, employeeId
+ *   employeeId       — exact ObjectId match
+ *   shiftId          — exact ObjectId match
+ *   attendanceStatus — 'onTime' | 'earlyOut' | 'arrivedLate'
+ *   date             — exact date match
+ *   fromDate         — attendance date >= fromDate
+ *   toDate           — attendance date <= toDate
  */
 const queryAttendances = async (filter, options) => {
-  const result = await Attendance.paginate(filter, options);
+  const { User } = require('../models');
+  const mongoFilter = {};
+
+  // Search — resolve user IDs first, then scope attendance records
+  if (filter.search) {
+    const regex = { $regex: filter.search, $options: 'i' };
+    const matchedUsers = await User.find(
+      { $or: [{ name: regex }, { email: regex }, { employeeId: regex }] },
+      { _id: 1 }
+    ).lean();
+    const userIds = matchedUsers.map((u) => u._id);
+    mongoFilter.employeeId = { $in: userIds };
+  }
+
+  // Direct employeeId filter (overrides search scope if both given)
+  if (filter.employeeId && isObjectId(filter.employeeId)) {
+    mongoFilter.employeeId = new mongoose.Types.ObjectId(filter.employeeId);
+  }
+
+  // Shift filter
+  if (filter.shiftId && isObjectId(filter.shiftId)) {
+    mongoFilter.shiftId = new mongoose.Types.ObjectId(filter.shiftId);
+  }
+
+  // Attendance status filter
+  if (filter.attendanceStatus) {
+    mongoFilter.attendanceStatus = filter.attendanceStatus;
+  }
+
+  // Exact date filter
+  if (filter.date && !filter.fromDate && !filter.toDate) {
+    const d = new Date(filter.date);
+    const start = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0, 0, 0));
+    const end   = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 23, 59, 59, 999));
+    mongoFilter.date = { $gte: start, $lte: end };
+  }
+
+  // Date range filter
+  if (filter.fromDate || filter.toDate) {
+    mongoFilter.date = {};
+    if (filter.fromDate) mongoFilter.date.$gte = new Date(filter.fromDate);
+    if (filter.toDate) {
+      const end = new Date(filter.toDate);
+      end.setUTCHours(23, 59, 59, 999);
+      mongoFilter.date.$lte = end;
+    }
+  }
+
+  const result = await Attendance.paginate(mongoFilter, options);
   await populateAttendance(result.results);
   return result;
 };

@@ -106,32 +106,29 @@ const getUsers = catchAsync(async (req, res) => {
     const departments = await userService.getDistinctDepartments();
     return res.send({ departments });
   }
-  else if(req.query.distinct === 'role')
-  {
+  if (req.query.distinct === 'role') {
     const roles = await userService.getDistinctroles();
-    return res.send({roles});
+    return res.send({ roles });
   }
 
-  // else if(req.params.distinct === 'status')
-  // {
-  //   const status = await userService.getDistinctStatus();
-  //   return res.send(status)
-  // }
-
-  const filter = pick(req.query, ['name', 'role']);
+  const filter  = pick(req.query, ['name', 'role']);
   const options = pick(req.query, ['sortBy', 'limit', 'page']);
 
   // Basic filters passed directly to queryUsers
-  if (req.query.empId)       filter.employeeId = req.query.empId;
+  if (req.query.empId) filter.employeeId = req.query.empId;
 
-  // Advanced filters that need special handling in the service
+  // Advanced filters handled in the service
   const advancedFilters = {
-    departmentId:  req.query.departmentId  || null,
-    designation:   req.query.designation   || null,
-    shiftId:       req.query.shiftId       || null,
-    status:        req.query.status        || null,   // active | inactive | relieved
-    joinedFrom:    req.query.joinedFrom    || null,   // ISO date
-    joinedTo:      req.query.joinedTo      || null,   // ISO date
+    search:       req.query.search       || null,
+    departmentId: req.query.departmentId || null,
+    teamId:       req.query.teamId       || null,
+    branchId:     req.query.branchId     || null,
+    designation:  req.query.designation  || null,
+    shiftId:      req.query.shiftId      || null,
+    gender:       req.query.gender       || null,
+    status:       req.query.status       || null,   // 'Active' | 'In-Active' | 'Relieved'
+    joinedFrom:   req.query.joinedFrom   || null,
+    joinedTo:     req.query.joinedTo     || null,
   };
 
   const result = await userService.queryUsers(filter, options, advancedFilters);

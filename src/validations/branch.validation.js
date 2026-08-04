@@ -7,13 +7,19 @@ const createBranch = {
 
 const getBranches = {
   query: Joi.object().keys({
-    branchName: Joi.string(),
-    branchNumber: Joi.string(),
-    branchStatus: Joi.string(),
-    branchType: Joi.string(),
-    sortBy: Joi.string(),
-    limit: Joi.number().integer(),
-    page: Joi.number().integer(),
+    // free-text search across branchName, branchNumber, city, state
+    search:       Joi.string().optional(),
+    // individual field filters
+    branchName:   Joi.string().optional(),
+    branchNumber: Joi.string().optional(),
+    branchStatus: Joi.string().valid('active', 'inactive').optional(),
+    branchType:   Joi.string().optional(),
+    city:         Joi.string().optional(),
+    state:        Joi.string().optional(),
+    // pagination & sorting
+    sortBy:       Joi.string().optional(),
+    limit:        Joi.number().integer().min(1).optional(),
+    page:         Joi.number().integer().min(1).optional(),
   }),
 };
 

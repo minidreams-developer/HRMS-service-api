@@ -41,14 +41,18 @@ const createShift = {
 
 const getShifts = {
   query: Joi.object().keys({
-    userId: Joi.string().custom(objectId),
-    shiftName: Joi.string(),
-    shiftCode: Joi.string(),
-    shiftType: Joi.string(),
-    isShiftActive: Joi.boolean(),
-    sortBy: Joi.string(),
-    limit: Joi.number().integer(),
-    page: Joi.number().integer(),
+    // free-text search across shiftName, shiftCode, shiftType
+    search:        Joi.string().optional(),
+    // individual field filters
+    userId:        Joi.string().custom(objectId).optional(),
+    shiftName:     Joi.string().optional(),
+    shiftCode:     Joi.string().optional(),
+    shiftType:     Joi.string().optional(),
+    isShiftActive: Joi.boolean().optional(),
+    // pagination & sorting
+    sortBy:        Joi.string().optional(),
+    limit:         Joi.number().integer().min(1).optional(),
+    page:          Joi.number().integer().min(1).optional(),
   }),
 };
 

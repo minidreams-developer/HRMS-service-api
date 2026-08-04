@@ -20,12 +20,20 @@ const createLeaveRequest = {
 
 const getLeaveRequests = {
   query: Joi.object().keys({
-    employeeId: Joi.string().custom(objectId),
-    leaveType: Joi.string(),
-    status: Joi.string().valid('pending', 'approved', 'ended'),
-    sortBy: Joi.string(),
-    limit: Joi.number().integer(),
-    page: Joi.number().integer(),
+    // search across linked employee's name, email, employeeId
+    search:       Joi.string().optional(),
+    // direct filters
+    employeeId:   Joi.string().custom(objectId).optional(),
+    leaveType:    Joi.string().optional(),
+    status:       Joi.string().valid('pending', 'approved', 'ended').optional(),
+    departmentId: Joi.string().custom(objectId).optional(),
+    // date range — covers startDate / singleDate
+    fromDate:     Joi.date().iso().optional(),
+    toDate:       Joi.date().iso().optional(),
+    // pagination & sorting
+    sortBy:       Joi.string().optional(),
+    limit:        Joi.number().integer().min(1).optional(),
+    page:         Joi.number().integer().min(1).optional(),
   }),
 };
 

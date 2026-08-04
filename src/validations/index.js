@@ -16,3 +16,5 @@ module.exports.payrollValidation = require('./payroll.validation');
 module.exports.paysheetValidation = require('./paysheet.validation');
 module.exports.dashboardValidation = require('./dashboard.validation');
 module.exports.hierarchyValidation = require('./hierarchy.validation');
+module.exports.leaderboardValidation = require('./leaderboard.validation');
+module.exports.holidayValidation = require('./holiday.validation');

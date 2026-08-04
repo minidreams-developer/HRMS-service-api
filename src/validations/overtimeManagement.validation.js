@@ -14,11 +14,18 @@ const createOvertime = {
 
 const getOvertime = {
   query: Joi.object().keys({
-    employeeId: Joi.string().custom(objectId),
-    status: Joi.string().valid('pending', 'approved'),
-    sortBy: Joi.string(),
-    limit: Joi.number().integer(),
-    page: Joi.number().integer(),
+    // search across linked employee's name, email, employeeId
+    search:     Joi.string().optional(),
+    // direct filters
+    employeeId: Joi.string().custom(objectId).optional(),
+    status:     Joi.string().valid('pending', 'approved').optional(),
+    // overtime date range
+    fromDate:   Joi.date().iso().optional(),
+    toDate:     Joi.date().iso().optional(),
+    // pagination & sorting
+    sortBy:     Joi.string().optional(),
+    limit:      Joi.number().integer().min(1).optional(),
+    page:       Joi.number().integer().min(1).optional(),
   }),
 };
 

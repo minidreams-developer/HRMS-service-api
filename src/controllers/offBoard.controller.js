@@ -10,9 +10,9 @@ const createOffBoard = catchAsync(async (req, res) => {
 });
 
 const getOffBoards = catchAsync(async (req, res) => {
-  const filter = pick(req.query, ['userId']);
+  const filter  = pick(req.query, ['userId', 'search', 'exitType', 'lastWorkingFrom', 'lastWorkingTo']);
   const options = pick(req.query, ['sortBy', 'limit', 'page']);
-  const result = await offBoardService.queryOffBoards(filter, options);
+  const result  = await offBoardService.queryOffBoards(filter, options);
   res.send(result);
 });
 

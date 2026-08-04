@@ -12,14 +12,86 @@ const createLeaveRequests = async (body) => {
 };
 
 /**
- * Query for leave requests
- * @param {Object} filter - Mongo filter
- * @param {Object} options - Query options
+ * Query for leave requests with search and filter support.
+ *
+ * Filter keys:
+ *   search       — regex across linked user's name, email, employeeId
+ *   employeeId   — exact ObjectId match
+ *   leaveType    — partial case-insensitive match
+ *   status       — 'pending' | 'approved' | 'ended'
+ *   departmentId — exact ObjectId match on department field
+ *   fromDate     — leave starts on or after this date
+ *   toDate       — leave starts on or before this date
+ *
+ * @param {Object} filter
+ * @param {Object} options - sortBy, limit, page
  * @returns {Promise<QueryResult>}
  */
 const queryLeaveRequests = async (filter, options) => {
+  const mongoose = require('mongoose');
+  const { User } = require('../models');
+  const mongoFilter = {};
+
+  // Search — resolve user IDs first
+  if (filter.search) {
+    const regex = { $regex: filter.search, $options: 'i' };
+    const matchedUsers = await User.find(
+      { $or: [{ name: regex }, { email: regex }, { employeeId: regex }] },
+      { _id: 1 }
+    ).lean();
+    const userIds = matchedUsers.map((u) => u._id);
+    mongoFilter.employeeId = { $in: userIds };
+  }
+
+  // Direct employeeId filter
+  if (filter.employeeId && !filter.search) {
+    mongoFilter.employeeId = filter.employeeId;
+  }
+
+  // Leave type filter — partial match
+  if (filter.leaveType) {
+    mongoFilter.leaveType = { $regex: filter.leaveType, $options: 'i' };
+  }
+
+  // Status filter
+  if (filter.status) {
+    mongoFilter.status = filter.status;
+  }
+
+  // Department filter
+  if (filter.departmentId) {
+    mongoFilter.department = filter.departmentId;
+  }
+
+  // Date range — match leaves where startDate or singleDate falls within range
+  if (filter.fromDate || filter.toDate) {
+    const dateConditions = [];
+    const from = filter.fromDate ? new Date(filter.fromDate) : null;
+    const to = filter.toDate ? (() => {
+      const d = new Date(filter.toDate);
+      d.setUTCHours(23, 59, 59, 999);
+      return d;
+    })() : null;
+
+    if (from && to) {
+      // Both bounds — startDate or singleDate in range
+      dateConditions.push({ startDate: { $gte: from, $lte: to } });
+      dateConditions.push({ singleDate: { $gte: from, $lte: to } });
+    } else if (from) {
+      dateConditions.push({ startDate: { $gte: from } });
+      dateConditions.push({ singleDate: { $gte: from } });
+    } else if (to) {
+      dateConditions.push({ startDate: { $lte: to } });
+      dateConditions.push({ singleDate: { $lte: to } });
+    }
+
+    if (dateConditions.length) {
+      mongoFilter.$or = dateConditions;
+    }
+  }
+
   const populateOptions = { ...options, populate: 'employeeId,department' };
-  const result = await LeaveRequests.paginate(filter, populateOptions);
+  const result = await LeaveRequests.paginate(mongoFilter, populateOptions);
   return result;
 };
 

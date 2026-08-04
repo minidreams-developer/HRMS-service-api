@@ -15,28 +15,74 @@ const createOffBoard = async (body) => {
 };
 
 /**
- * Query offboard records
+ * Query offboard records with search and filter support.
+ *
+ * Filter keys:
+ *   userId          — exact ObjectId match
+ *   search          — regex across linked user's name, email, employeeId
+ *   exitType        — case-insensitive match on exitInformation.exitType
+ *   lastWorkingFrom — exitInformation.lastWorkingDate >= date
+ *   lastWorkingTo   — exitInformation.lastWorkingDate <= date
+ *
  * @param {Object} filter
- * @param {Object} options
+ * @param {Object} options - sortBy, limit, page
  * @returns {Promise<QueryResult>}
  */
 const queryOffBoards = async (filter, options) => {
-  const safeFilter = {};
+  const { User } = require('../models');
+  const mongoFilter = {};
+
+  // userId filter
   if (filter.userId && mongoose.Types.ObjectId.isValid(filter.userId)) {
-    safeFilter.userId = filter.userId;
+    mongoFilter.userId = filter.userId;
+  }
+
+  // Search — find matching users first, then scope to their IDs
+  if (filter.search) {
+    const regex = { $regex: filter.search, $options: 'i' };
+    const matchedUsers = await User.find(
+      { $or: [{ name: regex }, { email: regex }, { employeeId: regex }] },
+      { _id: 1 }
+    ).lean();
+    const userIds = matchedUsers.map((u) => u._id);
+    // Intersect with existing userId filter if present
+    mongoFilter.userId = mongoFilter.userId
+      ? { $in: userIds.filter((id) => id.toString() === mongoFilter.userId.toString()) }
+      : { $in: userIds };
+  }
+
+  // Exit type filter
+  if (filter.exitType) {
+    mongoFilter['exitInformation.exitType'] = { $regex: filter.exitType, $options: 'i' };
+  }
+
+  // Last working date range
+  if (filter.lastWorkingFrom || filter.lastWorkingTo) {
+    mongoFilter['exitInformation.lastWorkingDate'] = {};
+    if (filter.lastWorkingFrom) {
+      mongoFilter['exitInformation.lastWorkingDate'].$gte = new Date(filter.lastWorkingFrom);
+    }
+    if (filter.lastWorkingTo) {
+      const end = new Date(filter.lastWorkingTo);
+      end.setUTCHours(23, 59, 59, 999);
+      mongoFilter['exitInformation.lastWorkingDate'].$lte = end;
+    }
   }
 
   const limit = Number(options.limit) || 10;
-  const page = Number(options.page) || 1;
+  const page  = Number(options.page)  || 1;
 
-  const offBoards = await OffBoard.find(safeFilter)
-    .populate('userId', 'name email employeeId')
-    .populate('userDocuments')
-    .sort(options.sortBy || '-createdAt')
-    .limit(limit)
-    .skip((page - 1) * limit);
+  const [offBoards, total] = await Promise.all([
+    OffBoard.find(mongoFilter)
+      .populate('userId', 'name email employeeId')
+      .populate('userDocuments')
+      .sort(options.sortBy ? options.sortBy.replace(':', ' ') : '-createdAt')
+      .limit(limit)
+      .skip((page - 1) * limit),
+    OffBoard.countDocuments(mongoFilter),
+  ]);
 
-  // exitApprovedBy is Mixed — only populate records where it's a valid ObjectId
+  // exitApprovedBy is Mixed — only populate where it's a valid ObjectId
   for (const record of offBoards) {
     if (
       record.exitInformation?.exitApprovedBy &&
@@ -45,8 +91,6 @@ const queryOffBoards = async (filter, options) => {
       await record.populate('exitInformation.exitApprovedBy', 'name email');
     }
   }
-
-  const total = await OffBoard.countDocuments(safeFilter);
 
   return {
     results: offBoards,

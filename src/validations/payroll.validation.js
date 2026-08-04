@@ -3,14 +3,20 @@ const { objectId } = require('./custom.validation');
 
 const getPayrollList = {
   query: Joi.object().keys({
-    month: Joi.number().integer().min(1).max(12).optional(),
-    year: Joi.number().integer().min(2000).max(2100).optional(),
+    month:        Joi.number().integer().min(1).max(12).optional(),
+    year:         Joi.number().integer().min(2000).max(2100).optional(),
+    // search across employee name, employeeId, email
+    search:       Joi.string().allow('').optional(),
+    // work info filters
     departmentId: Joi.string().custom(objectId).optional(),
-    shiftId: Joi.string().custom(objectId).optional(),
-    search: Joi.string().allow('').optional(),
-    sortBy: Joi.string().optional(),
-    limit: Joi.number().integer().min(1).max(100).optional(),
-    page: Joi.number().integer().min(1).optional(),
+    shiftId:      Joi.string().custom(objectId).optional(),
+    branchId:     Joi.string().custom(objectId).optional(),
+    // payroll status filter
+    status:       Joi.string().valid('draft', 'processed', 'paid', 'stopped', 'resumed').optional(),
+    // pagination & sorting
+    sortBy:       Joi.string().optional(),
+    limit:        Joi.number().integer().min(1).max(100).optional(),
+    page:         Joi.number().integer().min(1).optional(),
   }),
 };
 

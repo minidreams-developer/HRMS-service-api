@@ -1,20 +1,30 @@
 const Joi = require('joi');
 
+// Shared global filter keys applied to every dashboard endpoint
+const globalFilters = {
+  branchId:     Joi.string().optional(),
+  departmentId: Joi.string().optional(),
+  teamId:       Joi.string().optional(),
+};
+
 const getDashboard = {
   query: Joi.object().keys({
     date: Joi.date().iso().optional(),
+    ...globalFilters,
   }),
 };
 
 const getQuickStats = {
   query: Joi.object().keys({
     date: Joi.date().iso().optional(),
+    ...globalFilters,
   }),
 };
 
 const getAttendanceOverview = {
   query: Joi.object().keys({
     date: Joi.date().iso().optional(),
+    ...globalFilters,
   }),
 };
 
@@ -22,6 +32,7 @@ const getPayrollBreakdown = {
   query: Joi.object().keys({
     month: Joi.number().integer().min(1).max(12).optional(),
     year:  Joi.number().integer().min(2000).max(2100).optional(),
+    ...globalFilters,
   }),
 };
 

@@ -189,24 +189,25 @@ const computePayrollForEmployee = async (employee, month, year, payrollOverride 
 
 /**
  * Returns a paginated payroll listing for a given month/year.
- * Filters: departmentId, shiftId, search (name / employeeId)
+ * Filters: search (name / employeeId / email), departmentId, shiftId, branchId, status
  */
 const getPayrollList = async (query, options) => {
   const month = parseInt(query.month, 10) || new Date().getMonth() + 1;
-  const year = parseInt(query.year, 10) || new Date().getFullYear();
+  const year  = parseInt(query.year,  10) || new Date().getFullYear();
   const limit = parseInt(options.limit, 10) > 0 ? parseInt(options.limit, 10) : 10;
-  const page = parseInt(options.page, 10) > 0 ? parseInt(options.page, 10) : 1;
-  const skip = (page - 1) * limit;
+  const page  = parseInt(options.page,  10) > 0 ? parseInt(options.page,  10) : 1;
+  const skip  = (page - 1) * limit;
 
   // ── Build user match stage ────────────────────────────────────────────────
   const userMatch = {
     role: { $ne: 'admin' },
-    isActive: true,
+    isActive: 'Active',
   };
 
+  // Free-text search across name, employeeId, email
   if (query.search) {
     const regex = new RegExp(query.search, 'i');
-    userMatch.$or = [{ name: regex }, { employeeId: regex }];
+    userMatch.$or = [{ name: regex }, { employeeId: regex }, { email: regex }];
   }
 
   if (query.departmentId && mongoose.Types.ObjectId.isValid(query.departmentId)) {
@@ -215,6 +216,10 @@ const getPayrollList = async (query, options) => {
 
   if (query.shiftId && mongoose.Types.ObjectId.isValid(query.shiftId)) {
     userMatch['workInformation.shiftId'] = new mongoose.Types.ObjectId(query.shiftId);
+  }
+
+  if (query.branchId && mongoose.Types.ObjectId.isValid(query.branchId)) {
+    userMatch['workInformation.branch'] = new mongoose.Types.ObjectId(query.branchId);
   }
 
   // ── Fetch employees with their salary details ─────────────────────────────
@@ -228,22 +233,26 @@ const getPayrollList = async (query, options) => {
     .limit(limit)
     .lean();
 
-  // ── Fetch all payroll override records for this month/year in one query ───
+  // ── Fetch payroll override records (filtered by status if provided) ───────
   const employeeIds = employees.map((e) => e._id);
-  const payrollOverrides = await Payroll.find({
-    employeeId: { $in: employeeIds },
-    month,
-    year,
-  }).lean();
+  const payrollQuery = { employeeId: { $in: employeeIds }, month, year };
+  if (query.status) payrollQuery.status = query.status;
+
+  const payrollOverrides = await Payroll.find(payrollQuery).lean();
 
   const overrideMap = {};
   for (const ov of payrollOverrides) {
     overrideMap[String(ov.employeeId)] = ov;
   }
 
+  // When status filter is active, only return employees that have a matching payroll record
+  const filteredEmployees = query.status
+    ? employees.filter((e) => overrideMap[String(e._id)])
+    : employees;
+
   // ── Compute payroll for each employee in parallel ─────────────────────────
   const results = await Promise.all(
-    employees.map(async (emp) => {
+    filteredEmployees.map(async (emp) => {
       // Resolve department name
       let departmentName = null;
       const deptRef = emp.workInformation?.department;
@@ -277,8 +286,8 @@ const getPayrollList = async (query, options) => {
     results,
     page,
     limit,
-    totalPages: Math.ceil(totalResults / limit),
-    totalResults,
+    totalPages: Math.ceil((query.status ? results.length : totalResults) / limit),
+    totalResults: query.status ? results.length : totalResults,
     month,
     year,
   };

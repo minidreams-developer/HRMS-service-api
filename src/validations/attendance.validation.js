@@ -21,13 +21,21 @@ const createAttendance = {
 
 const getAttendances = {
   query: Joi.object().keys({
-    employeeId: Joi.string().custom(objectId),
-    shiftId: Joi.string().custom(objectId),
-    date: Joi.date(),
-    attendanceStatus: Joi.string().valid('onTime', 'earlyOut', 'arrivedLate'),
-    sortBy: Joi.string(),
-    limit: Joi.number().integer(),
-    page: Joi.number().integer(),
+    // search across linked employee's name, email, employeeId
+    search:           Joi.string().optional(),
+    // direct field filters
+    employeeId:       Joi.string().custom(objectId).optional(),
+    shiftId:          Joi.string().custom(objectId).optional(),
+    attendanceStatus: Joi.string().valid('onTime', 'earlyOut', 'arrivedLate').optional(),
+    // date range on attendance date
+    fromDate:         Joi.date().iso().optional(),
+    toDate:           Joi.date().iso().optional(),
+    // single exact date (existing behaviour preserved)
+    date:             Joi.date().optional(),
+    // pagination & sorting
+    sortBy:           Joi.string().optional(),
+    limit:            Joi.number().integer().min(1).optional(),
+    page:             Joi.number().integer().min(1).optional(),
   }),
 };
 

@@ -1,4 +1,5 @@
 const httpStatus = require('http-status');
+const mongoose = require('mongoose');
 const { Leaderboard } = require('../models');
 const ApiError = require('../utils/ApiError');
 
@@ -12,18 +13,38 @@ const createLeaderboard = async (body) => {
 };
 
 /**
- * Query for leaderboard entries
- * @param {Object} filter - Mongo filter
- * @param {Object} options - Query options
- * @param {string} [options.sortBy] - Sort option in the format: sortField:(desc|asc)
- * @param {number} [options.limit] - Maximum number of results per page (default = 10)
- * @param {number} [options.page] - Current page (default = 1)
+ * Query for leaderboard entries with search support.
+ *
+ * Filter keys:
+ *   search — regex across linked user's name, email, employeeId
+ *   user   — exact ObjectId match on the user field
+ *
+ * @param {Object} filter
+ * @param {Object} options - sortBy, limit, page
  * @returns {Promise<QueryResult>}
  */
 const queryLeaderboards = async (filter, options) => {
-  options.populate = 'user';
-  const leaderboards = await Leaderboard.paginate(filter, options);
-  return leaderboards;
+  const { User } = require('../models');
+  const mongoFilter = {};
+
+  // Search — resolve matching user IDs first
+  if (filter.search) {
+    const regex = { $regex: filter.search, $options: 'i' };
+    const matchedUsers = await User.find(
+      { $or: [{ name: regex }, { email: regex }, { employeeId: regex }] },
+      { _id: 1 }
+    ).lean();
+    const userIds = matchedUsers.map((u) => u._id);
+    mongoFilter.user = { $in: userIds };
+  }
+
+  // Direct user filter
+  if (filter.user && !filter.search) {
+    mongoFilter.user = filter.user;
+  }
+
+  const paginateOptions = { ...options, populate: 'user' };
+  return Leaderboard.paginate(mongoFilter, paginateOptions);
 };
 
 /**

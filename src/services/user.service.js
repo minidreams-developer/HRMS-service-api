@@ -145,22 +145,48 @@ const populateWorkInfo = async (docs) => {
 
 /**
  * Query for users with advanced filter support.
- * Advanced filters: departmentId, designation, shiftId, status, joinedFrom, joinedTo, sortBy
+ * Advanced filters: search, departmentId, teamId, branchId, designation,
+ *                   shiftId, gender, status, joinedFrom, joinedTo
  */
 const queryUsers = async (filter, options, advancedFilters = {}) => {
   // ── Build the MongoDB filter ────────────────────────────────────────────
   const mongoFilter = {};
 
-  // Basic direct-field filters
-  if (filter.name) {
+  // Free-text search across name, email, employeeId
+  if (advancedFilters.search) {
+    const regex = { $regex: advancedFilters.search, $options: 'i' };
+    mongoFilter.$or = [
+      { name:       regex },
+      { email:      regex },
+      { employeeId: regex },
+    ];
+  }
+
+  // Basic direct-field filters (name / role from pick — only when no search)
+  if (!advancedFilters.search && filter.name) {
     mongoFilter.name = { $regex: filter.name, $options: 'i' };
   }
   if (filter.role)       mongoFilter.role       = filter.role;
   if (filter.employeeId) mongoFilter.employeeId = filter.employeeId;
 
+  // Gender filter
+  if (advancedFilters.gender) {
+    mongoFilter.gender = advancedFilters.gender.toLowerCase();
+  }
+
   // Department filter — workInformation.department stores Mixed (ObjectId or object)
   if (advancedFilters.departmentId && isObjectId(advancedFilters.departmentId)) {
     mongoFilter['workInformation.department'] = new mongoose.Types.ObjectId(advancedFilters.departmentId);
+  }
+
+  // Team filter
+  if (advancedFilters.teamId && isObjectId(advancedFilters.teamId)) {
+    mongoFilter['workInformation.team'] = new mongoose.Types.ObjectId(advancedFilters.teamId);
+  }
+
+  // Branch filter
+  if (advancedFilters.branchId && isObjectId(advancedFilters.branchId)) {
+    mongoFilter['workInformation.branch'] = new mongoose.Types.ObjectId(advancedFilters.branchId);
   }
 
   // Designation filter — case-insensitive partial match
@@ -171,35 +197,23 @@ const queryUsers = async (filter, options, advancedFilters = {}) => {
     };
   }
 
-  // Shift filter — workInformation.shiftId stores Mixed (ObjectId or object)
+  // Shift filter
   if (advancedFilters.shiftId && isObjectId(advancedFilters.shiftId)) {
     mongoFilter['workInformation.shiftId'] = new mongoose.Types.ObjectId(advancedFilters.shiftId);
   }
 
-  // Status filter — maps UI labels to actual model fields
-  // Active   → isActive: true,  approvalStatus: 'approved'
-  // Inactive → isActive: false
-  // Relieved → approvalStatus: 'rejected'
+  // Status filter — maps to isActive String enum: 'Active' | 'In-Active' | 'Relieved'
   if (advancedFilters.status) {
-    const s = advancedFilters.status.toLowerCase();
-    if (s === 'active') {
-      mongoFilter.isActive       = true;
-      mongoFilter.approvalStatus = 'approved';
-    } else if (s === 'inactive') {
-      mongoFilter.isActive = false;
-    } else if (s === 'relieved') {
-      mongoFilter.approvalStatus = 'rejected';
-    }
+    mongoFilter.isActive = advancedFilters.status; // value is already validated by Joi
   }
 
-  // Date Range filter — joined date (workInformation.joinedDate)
+  // Joined-date range (workInformation.joinedDate)
   if (advancedFilters.joinedFrom || advancedFilters.joinedTo) {
     mongoFilter['workInformation.joinedDate'] = {};
     if (advancedFilters.joinedFrom) {
       mongoFilter['workInformation.joinedDate'].$gte = new Date(advancedFilters.joinedFrom);
     }
     if (advancedFilters.joinedTo) {
-      // Include the full end day
       const endDate = new Date(advancedFilters.joinedTo);
       endDate.setUTCHours(23, 59, 59, 999);
       mongoFilter['workInformation.joinedDate'].$lte = endDate;
@@ -207,15 +221,12 @@ const queryUsers = async (filter, options, advancedFilters = {}) => {
   }
 
   // ── Build sort options ──────────────────────────────────────────────────
-  // Supports field:asc / field:desc AND the Sort By panel values:
-  //   date → workInformation.joinedDate, name → name, status → isActive, amount → (not applicable for users)
   const buildSort = (sortByStr) => {
     if (!sortByStr) return undefined;
     const sortMap = {
       date:   'workInformation.joinedDate',
       name:   'name',
       status: 'isActive',
-      amount: 'name', // fallback for users — no salary field on User directly
     };
     const parts = sortByStr.split(',').map((s) => {
       const [rawKey, order] = s.split(':');
@@ -226,8 +237,8 @@ const queryUsers = async (filter, options, advancedFilters = {}) => {
   };
 
   const paginateOptions = {
-    limit:  parseInt(options.limit, 10) > 0 ? parseInt(options.limit, 10) : 10,
-    page:   parseInt(options.page,  10) > 0 ? parseInt(options.page,  10) : 1,
+    limit: parseInt(options.limit, 10) > 0 ? parseInt(options.limit, 10) : 10,
+    page:  parseInt(options.page,  10) > 0 ? parseInt(options.page,  10) : 1,
   };
   if (options.sortBy) {
     paginateOptions.sortBy = buildSort(options.sortBy);

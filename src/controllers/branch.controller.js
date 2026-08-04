@@ -10,9 +10,9 @@ const createBranch = catchAsync(async (req, res) => {
 });
 
 const getBranches = catchAsync(async (req, res) => {
-  const filter = pick(req.query, ['branchName', 'branchNumber', 'activeStatus']);
+  const filter  = pick(req.query, ['search', 'branchName', 'branchNumber', 'branchStatus', 'branchType', 'city', 'state']);
   const options = pick(req.query, ['sortBy', 'limit', 'page']);
-  const result = await branchService.queryBranches(filter, options);
+  const result  = await branchService.queryBranches(filter, options);
   res.send(result);
 });
 

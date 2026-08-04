@@ -5,9 +5,7 @@ const { User, Attendance, LeaveRequests, Overtime, Payroll } = require('../model
 // HELPERS
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Build UTC start/end for a single calendar day.
- */
+/** Build UTC start/end for a single calendar day. */
 const dayRange = (date) => {
   const d = new Date(date);
   const start = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0, 0, 0));
@@ -15,38 +13,20 @@ const dayRange = (date) => {
   return { start, end };
 };
 
-/**
- * Build UTC start/end for a calendar week containing `date` (Mon–Sun).
- */
-const weekRange = (date) => {
-  const d     = new Date(date);
-  const day   = d.getUTCDay(); // 0=Sun,1=Mon,...,6=Sat
-  const diff  = day === 0 ? -6 : 1 - day; // shift so week starts Monday
-  const start = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + diff, 0, 0, 0, 0));
-  const end   = new Date(start.getTime() + 6 * 24 * 60 * 60 * 1000 + 86399999);
-  return { start, end };
-};
-
-/**
- * Build UTC start/end for a calendar month.
- */
+/** Build UTC start/end for a calendar month. */
 const monthRange = (month, year) => {
   const start = new Date(Date.UTC(year, month - 1, 1, 0, 0, 0, 0));
   const end   = new Date(Date.UTC(year, month,     0, 23, 59, 59, 999));
   return { start, end };
 };
 
-/**
- * Return percentage change between current and previous values.
- */
+/** Return percentage change between current and previous values. */
 const pctChange = (current, previous) => {
   if (!previous || previous === 0) return current > 0 ? 100 : 0;
   return parseFloat(((current - previous) / previous * 100).toFixed(1));
 };
 
-/**
- * Format a date as "DD-MM" label for chart x-axis.
- */
+/** Format a date as "DD-MM" label for chart x-axis. */
 const ddmm = (date) => {
   const d = new Date(date);
   const day = String(d.getUTCDate()).padStart(2, '0');
@@ -55,21 +35,82 @@ const ddmm = (date) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+// GLOBAL FILTER HELPER
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Build a base User match query from the global filters object.
+ * Supports: branchId, departmentId, teamId.
+ *
+ * The User model stores these as mixed fields inside workInformation:
+ *   workInformation.branch      — can be an ObjectId or a plain value
+ *   workInformation.department  — same
+ *   workInformation.team        — same
+ *
+ * We match against both the raw string and the ObjectId form so the filter
+ * works regardless of how the value was originally saved.
+ */
+const buildUserFilterQuery = (filters = {}) => {
+  const query = { role: { $ne: 'admin' }, isActive: 'Active' };
+
+  if (filters.branchId) {
+    const id = mongoose.Types.ObjectId.isValid(filters.branchId)
+      ? new mongoose.Types.ObjectId(filters.branchId)
+      : null;
+    query['workInformation.branch'] = id
+      ? { $in: [id, filters.branchId] }
+      : filters.branchId;
+  }
+
+  if (filters.departmentId) {
+    const id = mongoose.Types.ObjectId.isValid(filters.departmentId)
+      ? new mongoose.Types.ObjectId(filters.departmentId)
+      : null;
+    query['workInformation.department'] = id
+      ? { $in: [id, filters.departmentId] }
+      : filters.departmentId;
+  }
+
+  if (filters.teamId) {
+    const id = mongoose.Types.ObjectId.isValid(filters.teamId)
+      ? new mongoose.Types.ObjectId(filters.teamId)
+      : null;
+    query['workInformation.team'] = id
+      ? { $in: [id, filters.teamId] }
+      : filters.teamId;
+  }
+
+  return query;
+};
+
+/**
+ * When at least one global filter is active, fetch the set of matching
+ * employee _ids and return them as an array of ObjectIds.
+ * Returns null when no filters are specified (meaning "all employees").
+ */
+const getFilteredEmployeeIds = async (filters = {}) => {
+  const hasFilter = filters.branchId || filters.departmentId || filters.teamId;
+  if (!hasFilter) return null;
+
+  const userQuery = buildUserFilterQuery(filters);
+  const users = await User.find(userQuery, { _id: 1 }).lean();
+  return users.map((u) => u._id);
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 // SECTION 1 — QUICK STATS
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Quick Stats computes five cards for a given reference date:
- *   1. Total Employees          — all active non-admin users
- *   2. Present Today            — unique employees with an attendance record today
- *   3. On Leave                 — employees with an approved leave covering today
- *   4. OT Employees             — employees with an approved overtime entry today
- *   5. Payroll (total pay)      — sum of grossEarnings for current month's processed payrolls
+ * Quick Stats — five cards for a given reference date.
+ * When global filters are provided, all counts are scoped to the matching
+ * employee subset.
  *
- * Each card also includes a percentageChange vs the previous comparable period.
+ * @param {Date}   date
+ * @param {object} filters  { branchId?, departmentId?, teamId? }
  */
-const getQuickStats = async (date = new Date()) => {
-  const today    = dayRange(date);
+const getQuickStats = async (date = new Date(), filters = {}) => {
+  const today     = dayRange(date);
   const yesterday = dayRange(new Date(new Date(date).setUTCDate(new Date(date).getUTCDate() - 1)));
 
   const curMonth  = new Date(date).getUTCMonth() + 1;
@@ -77,8 +118,18 @@ const getQuickStats = async (date = new Date()) => {
   const prevMonth = curMonth === 1 ? 12 : curMonth - 1;
   const prevYear  = curMonth === 1 ? curYear - 1 : curYear;
 
-  const { start: mStart, end: mEnd }    = monthRange(curMonth, curYear);
-  const { start: pmStart, end: pmEnd }  = monthRange(prevMonth, prevYear);
+  const { start: mStart, end: mEnd }   = monthRange(curMonth, curYear);
+  const { start: pmStart, end: pmEnd } = monthRange(prevMonth, prevYear);
+
+  // Resolve filtered employee IDs once; null means no filter (all employees)
+  const filteredIds = await getFilteredEmployeeIds(filters);
+
+  // Base user query for counting employees
+  const baseUserQuery = buildUserFilterQuery(filters);
+  const prevUserQuery = { ...buildUserFilterQuery(filters), createdAt: { $lt: today.start } };
+
+  // Attendance / leave / OT employee filter — add $in when a subset is active
+  const empFilter = filteredIds ? { $in: filteredIds } : { $exists: true };
 
   // ── Run all queries in parallel ───────────────────────────────────────────
   const [
@@ -95,19 +146,26 @@ const getQuickStats = async (date = new Date()) => {
   ] = await Promise.all([
 
     // 1. Total active employees (current)
-    User.countDocuments({ role: { $ne: 'admin' }, isActive: true }),
+    User.countDocuments(baseUserQuery),
 
     // 1. Total active employees (yesterday — proxy for "previous")
-    User.countDocuments({ role: { $ne: 'admin' }, isActive: true, createdAt: { $lt: today.start } }),
+    User.countDocuments(prevUserQuery),
 
-    // 2. Present today — distinct employeeIds in Attendance for today
-    Attendance.distinct('employeeId', { date: { $gte: today.start, $lte: today.end } }),
+    // 2. Present today
+    Attendance.distinct('employeeId', {
+      employeeId: empFilter,
+      date: { $gte: today.start, $lte: today.end },
+    }),
 
     // 2. Present yesterday
-    Attendance.distinct('employeeId', { date: { $gte: yesterday.start, $lte: yesterday.end } }),
+    Attendance.distinct('employeeId', {
+      employeeId: empFilter,
+      date: { $gte: yesterday.start, $lte: yesterday.end },
+    }),
 
-    // 3. On leave today — approved leaves that overlap today
+    // 3. On leave today
     LeaveRequests.distinct('employeeId', {
+      employeeId: empFilter,
       status: 'approved',
       $or: [
         { startDate: { $lte: today.end }, endDate:   { $gte: today.start } },
@@ -117,6 +175,7 @@ const getQuickStats = async (date = new Date()) => {
 
     // 3. On leave yesterday
     LeaveRequests.distinct('employeeId', {
+      employeeId: empFilter,
       status: 'approved',
       $or: [
         { startDate: { $lte: yesterday.end }, endDate:   { $gte: yesterday.start } },
@@ -124,21 +183,30 @@ const getQuickStats = async (date = new Date()) => {
       ],
     }),
 
-    // 4. OT employees today — approved overtime entries for today
+    // 4. OT employees today
     Overtime.distinct('employeeId', {
+      employeeId: empFilter,
       status: 'approved',
       OvertimeDate: { $gte: today.start, $lte: today.end },
     }),
 
     // 4. OT employees yesterday
     Overtime.distinct('employeeId', {
+      employeeId: empFilter,
       status: 'approved',
       OvertimeDate: { $gte: yesterday.start, $lte: yesterday.end },
     }),
 
-    // 5. Payroll total — current month processed/paid
+    // 5. Payroll total — current month
     Payroll.aggregate([
-      { $match: { month: curMonth, year: curYear, status: { $in: ['processed', 'paid'] } } },
+      {
+        $match: {
+          ...(filteredIds ? { employeeId: { $in: filteredIds } } : {}),
+          month: curMonth,
+          year: curYear,
+          status: { $in: ['processed', 'paid'] },
+        },
+      },
       {
         $group: {
           _id: null,
@@ -156,7 +224,14 @@ const getQuickStats = async (date = new Date()) => {
 
     // 5. Payroll total — previous month
     Payroll.aggregate([
-      { $match: { month: prevMonth, year: prevYear, status: { $in: ['processed', 'paid'] } } },
+      {
+        $match: {
+          ...(filteredIds ? { employeeId: { $in: filteredIds } } : {}),
+          month: prevMonth,
+          year: prevYear,
+          status: { $in: ['processed', 'paid'] },
+        },
+      },
       {
         $group: {
           _id: null,
@@ -211,12 +286,11 @@ const getQuickStats = async (date = new Date()) => {
 
 /**
  * Returns daily attendance counts for a 7-day window ending on `endDate`.
- * Each day has three series:
- *   - present  : attended and NOT on leave
- *   - onLeave  : approved leave overlapping that day
- *   - late     : attendanceStatus === 'arrivedLate'
+ *
+ * @param {Date}   endDate
+ * @param {object} filters  { branchId?, departmentId?, teamId? }
  */
-const getAttendanceOverview = async (endDate = new Date()) => {
+const getAttendanceOverview = async (endDate = new Date(), filters = {}) => {
   // Build an array of 7 dates ending on endDate
   const dates = [];
   for (let i = 6; i >= 0; i--) {
@@ -226,28 +300,34 @@ const getAttendanceOverview = async (endDate = new Date()) => {
   }
 
   const windowStart = dates[0];
-  const windowEnd   = new Date(dates[6].getTime() + 86399999); // end of last day
+  const windowEnd   = new Date(dates[6].getTime() + 86399999);
 
-  // Fetch all attendance records in the window in one query
-  const attendanceRecords = await Attendance.find({
-    date: { $gte: windowStart, $lte: windowEnd },
-  }).lean();
+  // Resolve filtered employee IDs once
+  const filteredIds = await getFilteredEmployeeIds(filters);
+  const empFilter   = filteredIds ? { $in: filteredIds } : { $exists: true };
 
-  // Fetch all approved leaves that overlap the window
-  const leaveRecords = await LeaveRequests.find({
-    status: 'approved',
-    $or: [
-      { startDate: { $lte: windowEnd }, endDate: { $gte: windowStart } },
-      { singleDate: { $gte: windowStart, $lte: windowEnd } },
-    ],
-  }).lean();
+  // Fetch all attendance and leave records in the window
+  const [attendanceRecords, leaveRecords] = await Promise.all([
+    Attendance.find({
+      employeeId: empFilter,
+      date: { $gte: windowStart, $lte: windowEnd },
+    }).lean(),
+
+    LeaveRequests.find({
+      employeeId: empFilter,
+      status: 'approved',
+      $or: [
+        { startDate: { $lte: windowEnd }, endDate: { $gte: windowStart } },
+        { singleDate: { $gte: windowStart, $lte: windowEnd } },
+      ],
+    }).lean(),
+  ]);
 
   // Build per-day counts
   const dailyData = dates.map((day) => {
     const dayStart = new Date(day);
     const dayEnd   = new Date(day.getTime() + 86399999);
 
-    // Attendance on this day
     const dayAttendance = attendanceRecords.filter((rec) => {
       const recDate = new Date(rec.date);
       return recDate >= dayStart && recDate <= dayEnd;
@@ -256,7 +336,6 @@ const getAttendanceOverview = async (endDate = new Date()) => {
     const presentCount = dayAttendance.length;
     const lateCount    = dayAttendance.filter((r) => r.attendanceStatus === 'arrivedLate').length;
 
-    // Employees on leave on this day
     const onLeaveCount = leaveRecords.filter((leave) => {
       if (leave.singleDate) {
         const sd = new Date(leave.singleDate);
@@ -286,12 +365,18 @@ const getAttendanceOverview = async (endDate = new Date()) => {
 
 /**
  * Returns category-level payroll breakdown for a given month/year.
- * Categories: salary, allowances, deductions, incentives, overtime.
+ *
+ * @param {number} month
+ * @param {number} year
+ * @param {object} filters  { branchId?, departmentId?, teamId? }
  */
-const getPayrollBreakdown = async (month, year) => {
+const getPayrollBreakdown = async (month, year, filters = {}) => {
+  const filteredIds = await getFilteredEmployeeIds(filters);
+
   const result = await Payroll.aggregate([
     {
       $match: {
+        ...(filteredIds ? { employeeId: { $in: filteredIds } } : {}),
         month,
         year,
         status: { $in: ['processed', 'paid'] },
@@ -342,20 +427,23 @@ const getPayrollBreakdown = async (month, year) => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Returns the complete dashboard payload in a single call:
- *   - quickStats         (Today filter)
- *   - attendanceOverview (This Week filter — 7-day window)
- *   - payrollBreakdown   (This Month filter)
+ * Returns the complete dashboard payload in a single call.
+ *
+ * @param {Date}   date
+ * @param {object} filters  { branchId?, departmentId?, teamId? }
  */
-const getDashboard = async (date = new Date()) => {
+const getDashboard = async (date = new Date(), filters = {}) => {
   const d     = new Date(date);
   const month = d.getUTCMonth() + 1;
   const year  = d.getUTCFullYear();
 
+  // Resolve the filtered IDs once and reuse across all three sections
+  const filteredIds = await getFilteredEmployeeIds(filters);
+
   const [quickStats, attendanceOverview, payrollBreakdown] = await Promise.all([
-    getQuickStats(d),
-    getAttendanceOverview(d),
-    getPayrollBreakdown(month, year),
+    getQuickStats(d, filters),
+    getAttendanceOverview(d, filters),
+    getPayrollBreakdown(month, year, filters),
   ]);
 
   return {
@@ -364,6 +452,7 @@ const getDashboard = async (date = new Date()) => {
       referenceDate: d.toISOString().split('T')[0],
       month,
       year,
+      filters: Object.keys(filters).length ? filters : undefined,
     },
     quickStats,
     attendanceOverview,

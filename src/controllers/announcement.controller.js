@@ -33,12 +33,12 @@ const createAnnouncement = catchAsync(async (req, res) => {
 
 /**
  * GET /announcements
- * Supports: title, search, sortBy, limit, page
+ * Supports: title, search, fromDate, toDate, sortBy, limit, page
  */
 const getAnnouncements = catchAsync(async (req, res) => {
-  const filter = pick(req.query, ['title', 'search']);
+  const filter  = pick(req.query, ['title', 'search', 'fromDate', 'toDate']);
   const options = pick(req.query, ['sortBy', 'limit', 'page']);
-  const result = await announcementService.queryAnnouncements(filter, options);
+  const result  = await announcementService.queryAnnouncements(filter, options);
   res.send(result);
 });
 
