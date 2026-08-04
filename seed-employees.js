@@ -81,7 +81,7 @@ const buildEmployees = (refs) => {
       emergencyContacts: [{ contactName: 'Kavitha Murugesan', phone: 9876541002, relattionship: 'Spouse', mobileNumber: 9876541002 }],
       workInformation: {
         joinedDate: '2021-06-01', experienceType: 'experienced', AttendanceType: 'biometric',
-        designation: 'Software Engineer',
+        designation: 'Software Engineer', companyName: 'Ace Workforce',
         department: departments['Engineering'],
         team: teams['Backend Team'],
         branch: branches['Chennai HQ'],
@@ -101,7 +101,7 @@ const buildEmployees = (refs) => {
       emergencyContacts: [{ contactName: 'Rajan Sundaram', phone: 9876541004, relattionship: 'Father', mobileNumber: 9876541004 }],
       workInformation: {
         joinedDate: '2022-03-15', experienceType: 'experienced', AttendanceType: 'biometric',
-        designation: 'UI/UX Designer',
+        designation: 'UI/UX Designer', companyName: 'Ace Workforce',
         department: departments['Product'],
         team: teams['Product Team'],
         branch: branches['Chennai HQ'],
@@ -120,7 +120,7 @@ const buildEmployees = (refs) => {
       emergencyContacts: [{ contactName: 'Meena Karthik', phone: 9876541006, relattionship: 'Spouse', mobileNumber: 9876541006 }],
       workInformation: {
         joinedDate: '2020-08-10', experienceType: 'experienced', AttendanceType: 'manual',
-        designation: 'Senior Backend Developer',
+        designation: 'Senior Backend Developer', companyName: 'Ace Workforce',
         department: departments['Engineering'],
         team: teams['Backend Team'],
         branch: branches['Coimbatore'],
@@ -140,7 +140,7 @@ const buildEmployees = (refs) => {
       emergencyContacts: [{ contactName: 'Venkatesh Iyer', phone: 9876541008, relattionship: 'Spouse', mobileNumber: 9876541008 }],
       workInformation: {
         joinedDate: '2021-11-22', experienceType: 'experienced', AttendanceType: 'biometric',
-        designation: 'HR Executive',
+        designation: 'HR Executive', companyName: 'Ace Workforce',
         department: departments['Human Resources'],
         team: teams['HR Operations'],
         branch: branches['Coimbatore'],
@@ -159,7 +159,7 @@ const buildEmployees = (refs) => {
       emergencyContacts: [{ contactName: 'Selvi Suresh', phone: 9876541010, relattionship: 'Spouse', mobileNumber: 9876541010 }],
       workInformation: {
         joinedDate: '2019-04-01', experienceType: 'experienced', AttendanceType: 'biometric',
-        designation: 'Team Lead',
+        designation: 'Team Lead', companyName: 'Ace Workforce',
         department: departments['Engineering'],
         team: teams['Frontend Team'],
         branch: branches['Madurai'],
@@ -179,7 +179,7 @@ const buildEmployees = (refs) => {
       emergencyContacts: [{ contactName: 'Krishnamurthy Pillai', phone: 9876541012, relattionship: 'Father', mobileNumber: 9876541012 }],
       workInformation: {
         joinedDate: '2023-01-09', experienceType: 'fresher', AttendanceType: 'biometric',
-        designation: 'Junior Developer',
+        designation: 'Junior Developer', companyName: 'Ace Workforce',
         department: departments['Engineering'],
         team: teams['Frontend Team'],
         branch: branches['Chennai HQ'],
@@ -199,7 +199,7 @@ const buildEmployees = (refs) => {
       emergencyContacts: [{ contactName: 'Lakshmi Vijay', phone: 9876541014, relattionship: 'Spouse', mobileNumber: 9876541014 }],
       workInformation: {
         joinedDate: '2020-12-01', experienceType: 'experienced', AttendanceType: 'manual',
-        designation: 'QA Engineer',
+        designation: 'QA Engineer', companyName: 'Ace Workforce',
         department: departments['Quality Assurance'],
         team: teams['QA Team'],
         branch: branches['Chennai HQ'],
