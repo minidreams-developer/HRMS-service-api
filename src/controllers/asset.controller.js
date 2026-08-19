@@ -40,10 +40,22 @@ const deleteAsset = catchAsync(async (req, res) => {
   res.status(httpStatus.NO_CONTENT).send();
 });
 
+/**
+ * PATCH /v1/assets/:assetId/assign/:employeeId
+ * Assign an asset to a specific employee.
+ */
+const assignAssetToEmployee = catchAsync(async (req, res) => {
+  const { assetId, employeeId } = req.params;
+  const { issuedDate } = req.body;
+  const asset = await assetService.assignAssetToEmployee(assetId, employeeId, issuedDate);
+  res.send(asset);
+});
+
 module.exports = {
   createAsset,
   getAssets,
   getAsset,
   updateAsset,
   deleteAsset,
+  assignAssetToEmployee,
 };

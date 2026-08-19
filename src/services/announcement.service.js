@@ -3,12 +3,32 @@ const { Announcement } = require('../models');
 const ApiError = require('../utils/ApiError');
 
 /**
- * Create an announcement
+ * Derive the correct status from the body fields:
+ * - No scheduleDateAndTime         → 'published'  (publish immediately)
+ * - scheduleDateAndTime in past    → 'published'  (publish immediately)
+ * - scheduleDateAndTime in future  → 'scheduled'  (wait for cron to publish)
+ */
+const resolveStatus = (body) => {
+  if (!body.scheduleDateAndTime) return 'published';
+  const scheduled = new Date(body.scheduleDateAndTime);
+  if (isNaN(scheduled.getTime())) return 'published';
+  return scheduled <= new Date() ? 'published' : 'scheduled';
+};
+
+/**
+ * Create an announcement.
+ * - If scheduleDateAndTime is in the future  → status: 'scheduled'
+ * - Otherwise                                → status: 'published', publishedAt: now
  * @param {Object} body
  * @returns {Promise<Announcement>}
  */
 const createAnnouncement = async (body) => {
-  return Announcement.create(body);
+  const status = resolveStatus(body);
+  return Announcement.create({
+    ...body,
+    status,
+    publishedAt: status === 'published' ? new Date() : null,
+  });
 };
 
 /**
@@ -17,10 +37,11 @@ const createAnnouncement = async (body) => {
  * Supported filter keys:
  *   - search   : case-insensitive regex across title, description, content
  *   - title    : exact (case-insensitive) title match
+ *   - status   : 'draft' | 'scheduled' | 'published'
  *   - fromDate : scheduleDateAndTime >= fromDate
  *   - toDate   : scheduleDateAndTime <= toDate
  *
- * @param {Object} filter   - { search?, title?, fromDate?, toDate? }
+ * @param {Object} filter   - { search?, title?, status?, fromDate?, toDate? }
  * @param {Object} options  - { sortBy?, limit?, page? }
  * @returns {Promise<QueryResult>}
  */
@@ -33,9 +54,21 @@ const queryAnnouncements = async (filter, options) => {
     query.$or = [{ title: regex }, { description: regex }, { content: regex }];
   }
 
-  // Exact title filter (takes precedence over search when both are given)
+  // Exact title filter
   if (filter.title) {
     query.title = new RegExp(filter.title, 'i');
+  }
+
+  // Status filter — default to published, but also include old docs with no status field
+  if (filter.status) {
+    query.status = filter.status;
+  } else {
+    // No filter provided: return published docs + legacy docs that predate the status field
+    query.$or = [
+      { status: 'published' },
+      { status: { $exists: false } },
+      { status: null },
+    ];
   }
 
   // Date range on scheduleDateAndTime
@@ -45,9 +78,9 @@ const queryAnnouncements = async (filter, options) => {
     if (filter.toDate)   query.scheduleDateAndTime.$lte = new Date(filter.toDate);
   }
 
-  // Default sort: newest scheduled first
+  // Default sort: newest first
   if (!options.sortBy) {
-    options.sortBy = 'scheduleDateAndTime:desc';
+    options.sortBy = 'createdAt:desc';
   }
 
   return Announcement.paginate(query, options);
@@ -63,7 +96,8 @@ const getAnnouncementById = async (id) => {
 };
 
 /**
- * Update announcement by id
+ * Update announcement by id.
+ * Re-evaluates status if scheduleDateAndTime is changed.
  * @param {ObjectId} id
  * @param {Object} updateBody
  * @returns {Promise<Announcement>}
@@ -73,6 +107,14 @@ const updateAnnouncementById = async (id, updateBody) => {
   if (!announcement) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Announcement not found');
   }
+
+  // If scheduleDateAndTime is being updated, re-derive status
+  if (updateBody.scheduleDateAndTime !== undefined) {
+    const newStatus = resolveStatus(updateBody);
+    updateBody.status = newStatus;
+    updateBody.publishedAt = newStatus === 'published' ? new Date() : null;
+  }
+
   Object.assign(announcement, updateBody);
   await announcement.save();
   return announcement;
@@ -131,6 +173,29 @@ const removeImageFromAnnouncement = async (id, imgName) => {
   return announcement;
 };
 
+/**
+ * Called by the cron scheduler every minute.
+ * Finds all announcements with status 'scheduled' whose scheduleDateAndTime
+ * has passed and marks them as 'published'.
+ * @returns {Promise<number>} count of announcements published
+ */
+const publishDueAnnouncements = async () => {
+  const now = new Date();
+  const result = await Announcement.updateMany(
+    {
+      status: 'scheduled',
+      scheduleDateAndTime: { $lte: now },
+    },
+    {
+      $set: {
+        status: 'published',
+        publishedAt: now,
+      },
+    }
+  );
+  return result.nModified || result.modifiedCount || 0;
+};
+
 module.exports = {
   createAnnouncement,
   queryAnnouncements,
@@ -139,4 +204,5 @@ module.exports = {
   deleteAnnouncementById,
   addImagesToAnnouncement,
   removeImageFromAnnouncement,
+  publishDueAnnouncements,
 };

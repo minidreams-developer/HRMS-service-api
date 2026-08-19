@@ -22,6 +22,13 @@ router
   .patch(validate(announcementValidation.updateAnnouncement), announcementController.updateAnnouncement)
   .delete(validate(announcementValidation.deleteAnnouncement), announcementController.deleteAnnouncement);
 
+// ── Schedule an announcement ─────────────────────────────────────────────────
+// PATCH /v1/announcements/:announcementId/schedule
+// Body: { scheduleDateAndTime: "2026-08-20T09:00:00.000Z" }
+router
+  .route('/:announcementId/schedule')
+  .patch(announcementController.scheduleAnnouncement);
+
 // ── Image management ─────────────────────────────────────────────────────────
 router
   .route('/:announcementId/images')

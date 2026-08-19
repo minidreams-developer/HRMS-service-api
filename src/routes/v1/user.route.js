@@ -4,10 +4,10 @@ const validate = require('../../middlewares/validate');
 const userValidation = require('../../validations/user.validation');
 const agentController = require('../../controllers/agent.controller');
 const router = express.Router();
-
+// validate(userValidation.registerEmployee), 
 router
   .route('/employee-registration')
-  .post(validate(userValidation.registerEmployee), userController.registerEmployee);
+  .post(userController.registerEmployee);
 
 router
   .route('/generate-employeeId')

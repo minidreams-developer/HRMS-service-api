@@ -39,13 +39,13 @@ const userSchema = mongoose.Schema(
       type: String,
       trim: true,
       minlength: 8,
-      validate(value) {
-        if (!value.match(/\d/) || !value.match(/[a-zA-Z]/)) {
-          throw new Error(
-            "Password must contain at least one letter and one number"
-          );
-        }
-      },
+      // validate(value) {
+      //   if (!value.match(/\d/) || !value.match(/[a-zA-Z]/)) {
+      //     throw new Error(
+      //       "Password must contain at least one letter and one number"
+      //     );
+      //   }
+      // },
       private: true, // used by the toJSON plugin
     },
     role: {
@@ -142,12 +142,23 @@ const userSchema = mongoose.Schema(
       bankDetails: [{ type: mongoose.Schema.Types.ObjectId, ref: "BankDetails" }],
       SalaryDetails: { type: mongoose.Schema.Types.ObjectId, ref: "SalaryDetails" },
       userRemarks: { type: String },
-      designation:{type:String, default:"employee"},
-      companyName:{type:String,trim:true},
-      specialty:{type:String,trim:true},
-      LicenseNo:{type:String,trim:true},
-      dateOfJoining:{type:Date},
-      jobItems:{type:mongoose.Schema.Types.ObjectId,ref:"Contractor"}
+      designation: { type: String, default: "employee" },
+      companyName: { type: String, trim: true },
+      specialty: { type: String, trim: true },
+      LicenseNo: { type: String, trim: true },
+      dateOfJoining: { type: Date },
+      jobItems: { type: mongoose.Schema.Types.ObjectId, ref: "Contractor" },
+      // Work experience fields
+      workExperience: { type: String },
+      totalExperience: { type: String },
+      lastCompanyName: { type: String },
+      lastCompanyExperience: { type: String },
+      location: { type: String },
+      reference: { type: String },
+      // Exit/termination fields
+      terminationDate: { type: Date },
+      exitDate: { type: Date },
+      relievedDate: { type: Date },
     },
 
     referenceDetails:{
@@ -182,7 +193,7 @@ const userSchema = mongoose.Schema(
     isActive: {
       type: String,
       enum: Status,
-      default: true,
+      default: "Active",
     },
   },
   {
@@ -222,7 +233,7 @@ userSchema.methods.isPasswordMatch = async function (password) {
 
 userSchema.pre("save", async function (next) {
   const user = this;
-  if (user.isModified("password")) {
+  if (user.isModified("password") && user.password) {
     user.password = await bcrypt.hash(user.password, 8);
   }
   next();

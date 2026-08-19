@@ -6,7 +6,17 @@ const { generateEmployeeId: generateId } = require('../utils/employeeId');
 const { setPending, getPending, clearPending } = require('../utils/pendingCode');
 const mongoose = require('mongoose');
 
-const EMP_ID_KEY = 'employeeId';
+/**
+ * Convert a value to ObjectId if it is a valid ObjectId string.
+ * Returns the original value if not valid (e.g. plain strings like "agent_1").
+ */
+const toObjectId = (val) => {
+  if (!val) return val;
+  if (mongoose.Types.ObjectId.isValid(val) && String(new mongoose.Types.ObjectId(val)) === String(val)) {
+    return new mongoose.Types.ObjectId(val);
+  }
+  return val;
+};
 
 /**
  * Register a full employee with all related sub-documents
@@ -79,13 +89,13 @@ const registerEmployee = async (body) => {
     workInformation: {
       joinedDate: body.workInformation?.joinedDate,
       experienceType: body.workInformation?.experienceType,
-      department: body.workInformation?.department,
-      team: body.workInformation?.team,
-      branch: body.workInformation?.branch,
-      contractAgent: body.workInformation?.contractAgent,
-      reportingPerson: body.workInformation?.reportingPerson,
+      department: toObjectId(body.workInformation?.department),
+      team: toObjectId(body.workInformation?.team),
+      branch: toObjectId(body.workInformation?.branch),
+      contractAgent: toObjectId(body.workInformation?.contractAgent),
+      reportingPerson: toObjectId(body.workInformation?.reportingPerson),
       AttendanceType: body.workInformation?.AttendanceType,
-      shiftId: body.workInformation?.shiftId,
+      shiftId: toObjectId(body.workInformation?.shiftId),
       bankDetails: bankDetailIds,
       SalaryDetails: salaryDetailsId,
       userRemarks: body.workInformation?.userRemarks,
@@ -117,11 +127,13 @@ const isObjectId = (val) => mongoose.Types.ObjectId.isValid(val) && String(new m
  */
 const populateWorkInfo = async (docs) => {
   const fields = [
-    { path: 'workInformation.department', model: 'Department' },
-    { path: 'workInformation.team', model: 'Team' },
-    { path: 'workInformation.branch', model: 'Branch' },
-    { path: 'workInformation.shiftId', model: 'Shift' },
+    { path: 'workInformation.department', model: 'Department', select: 'departmentName departmentCode departmentDescription' },
+    { path: 'workInformation.team',       model: 'Team',       select: 'teamName teamCode teamDescription' },
+    { path: 'workInformation.branch',     model: 'Branch' },
+    { path: 'workInformation.shiftId',    model: 'Shift' },
     { path: 'workInformation.reportingPerson', model: 'User', select: 'name employeeId email' },
+    { path: 'workInformation.contractAgent',   model: 'Agent' },
+    { path: 'workInformation.jobItems',        model: 'Contractor' },
   ];
 
   for (const doc of docs) {
@@ -130,14 +142,6 @@ const populateWorkInfo = async (docs) => {
       const val = doc.workInformation?.[key];
       if (val && isObjectId(val)) {
         await mongoose.model(model).populate(doc, { path, select });
-      }
-    }
-    // bankDetails array — filter to valid ObjectIds only
-    if (doc.workInformation?.bankDetails?.length) {
-      const validIds = doc.workInformation.bankDetails.filter(isObjectId);
-      doc.workInformation.bankDetails = validIds;
-      if (validIds.length) {
-        await mongoose.model('BankDetails').populate(doc, { path: 'workInformation.bankDetails' });
       }
     }
   }
@@ -252,6 +256,7 @@ const queryUsers = async (filter, options, advancedFilters = {}) => {
     { path: 'emergencyContact' },
     { path: 'userDocuments' },
     { path: 'workInformation.SalaryDetails' },
+    { path: 'workInformation.bankDetails' },
   ]);
   await populateWorkInfo(result.results);
   return result;
@@ -267,7 +272,8 @@ const getUserById = async (id) => {
     .populate('address')
     .populate('emergencyContact')
     .populate('userDocuments')
-    .populate('workInformation.SalaryDetails');
+    .populate('workInformation.SalaryDetails')
+    .populate('workInformation.bankDetails');
   if (user) await populateWorkInfo([user]);
   return user;
 };
@@ -295,9 +301,119 @@ const updateUserById = async (userId, updateBody) => {
   if (updateBody.email && (await User.isEmailTaken(updateBody.email, userId))) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Email already taken');
   }
+
+  // ── Handle nested sub-documents separately ─────────────────────────────────
+
+  // Update bank details in place (don't create new documents)
+  if (updateBody.workInformation?.bankDetails?.length) {
+    const existingBankIds = user.workInformation?.bankDetails || [];
+    const updatedBankIds = [];
+    
+    for (let i = 0; i < updateBody.workInformation.bankDetails.length; i++) {
+      const bankData = updateBody.workInformation.bankDetails[i];
+      
+      // If bankData has an 'id' or '_id' field, it's an existing document — update it
+      let existingId = bankData.id || bankData._id;
+      
+      // Fallback: if no id provided but user has existing bank details, update by index
+      if (!existingId && existingBankIds[i]) {
+        existingId = existingBankIds[i];
+      }
+      
+      // Clean up nested _id fields from esiAndPf
+      if (bankData.esiAndPf?._id) {
+        delete bankData.esiAndPf._id;
+      }
+      
+      if (existingId) {
+        // Remove id/_id from the update data to avoid validation issues
+        const { id, _id, ...cleanBankData } = bankData;
+        console.log('[updateUserById] Updating existing bank detail:', existingId);
+        await BankDetails.findByIdAndUpdate(existingId, cleanBankData);
+        updatedBankIds.push(existingId);
+      } else {
+        // No id means it's a new bank detail — create it
+        console.log('[updateUserById] Creating new bank detail');
+        const created = await BankDetails.create(bankData);
+        updatedBankIds.push(created._id);
+      }
+    }
+    
+    // Replace with the ObjectId array
+    updateBody.workInformation.bankDetails = updatedBankIds;
+  }
+
+  // Update salary details in place (don't create new document)
+  if (updateBody.workInformation?.SalaryDetails) {
+    const salaryData = updateBody.workInformation.SalaryDetails;
+    if (user.workInformation?.SalaryDetails) {
+      // Update existing
+      await SalaryDetails.findByIdAndUpdate(user.workInformation.SalaryDetails, salaryData);
+      updateBody.workInformation.SalaryDetails = user.workInformation.SalaryDetails;
+    } else {
+      // Create new
+      const created = await SalaryDetails.create(salaryData);
+      updateBody.workInformation.SalaryDetails = created._id;
+    }
+  }
+
+  // Update addresses in place
+  if (updateBody.address?.length) {
+    const existingAddressIds = user.address || [];
+    for (let i = 0; i < updateBody.address.length; i++) {
+      const addrData = updateBody.address[i];
+      
+      if (existingAddressIds[i]) {
+        await Address.findByIdAndUpdate(existingAddressIds[i], addrData);
+      } else {
+        const created = await Address.create(addrData);
+        existingAddressIds.push(created._id);
+      }
+    }
+    updateBody.address = existingAddressIds;
+  }
+
+  // Update emergency contacts in place
+  if (updateBody.emergencyContact?.length) {
+    const existingECIds = user.emergencyContact || [];
+    for (let i = 0; i < updateBody.emergencyContact.length; i++) {
+      const ecData = updateBody.emergencyContact[i];
+      
+      if (existingECIds[i]) {
+        await EmergencyContact.findByIdAndUpdate(existingECIds[i], ecData);
+      } else {
+        const created = await EmergencyContact.create(ecData);
+        existingECIds.push(created._id);
+      }
+    }
+    updateBody.emergencyContact = existingECIds;
+  }
+
+  // ── Deep merge workInformation ─────────────────────────────────────────────
+  if (updateBody.workInformation) {
+    // Cast ObjectId string fields before merging
+    const wi = updateBody.workInformation;
+    if (wi.department)     wi.department     = toObjectId(wi.department);
+    if (wi.team)           wi.team           = toObjectId(wi.team);
+    if (wi.shiftId)        wi.shiftId        = toObjectId(wi.shiftId);
+    if (wi.reportingPerson) wi.reportingPerson = toObjectId(wi.reportingPerson);
+    if (wi.contractAgent)  wi.contractAgent  = toObjectId(wi.contractAgent);
+    // branch: only cast if it's a plain ObjectId string (not a full populated object)
+    if (wi.branch && typeof wi.branch === 'string') wi.branch = toObjectId(wi.branch);
+
+    updateBody.workInformation = {
+      ...((user.workInformation || {}).toObject
+        ? user.workInformation.toObject()
+        : user.workInformation || {}),
+      ...wi,
+    };
+  }
+
   Object.assign(user, updateBody);
   await user.save();
-  return user;
+
+  // Re-fetch with full population so response includes populated team, department, etc.
+  return getUserById(userId);
 };
 
 /**

@@ -3,11 +3,11 @@ const { toJSON, paginate } = require("./plugins");
 
 const esiAndPf = new mongoose.Schema({
   esiNumber: {
-    type: Number,
+    type: String,
     trim: true,
   },
   pfNumber: {
-    type: Number,
+    type: String,
     trim: true,
   },
 });
@@ -26,7 +26,7 @@ const bankDetailsSchema = new mongoose.Schema(
       trim: true,
     },
     accountNumber: {
-      type: Number,
+      type: String,
       trim: true,
     },
     ifscCode: {

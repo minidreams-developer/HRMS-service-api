@@ -33,10 +33,10 @@ const createAnnouncement = catchAsync(async (req, res) => {
 
 /**
  * GET /announcements
- * Supports: title, search, fromDate, toDate, sortBy, limit, page
+ * Supports: title, search, fromDate, toDate, status, sortBy, limit, page
  */
 const getAnnouncements = catchAsync(async (req, res) => {
-  const filter  = pick(req.query, ['title', 'search', 'fromDate', 'toDate']);
+  const filter  = pick(req.query, ['title', 'search', 'fromDate', 'toDate', 'status']);
   const options = pick(req.query, ['sortBy', 'limit', 'page']);
   const result  = await announcementService.queryAnnouncements(filter, options);
   res.send(result);
@@ -59,7 +59,36 @@ const getAnnouncement = catchAsync(async (req, res) => {
 const updateAnnouncement = catchAsync(async (req, res) => {
   const announcement = await announcementService.updateAnnouncementById(req.params.announcementId, req.body);
   res.send(announcement);
-}); 
+});
+
+/**
+ * PATCH /announcements/:announcementId/schedule
+ * Set or update the scheduled publish time for an existing announcement.
+ * Body: { scheduleDateAndTime: ISO date string }
+ */
+const scheduleAnnouncement = catchAsync(async (req, res) => {
+  const { scheduleDateAndTime } = req.body;
+
+  if (!scheduleDateAndTime) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'scheduleDateAndTime is required');
+  }
+
+  const scheduled = new Date(scheduleDateAndTime);
+  if (isNaN(scheduled.getTime())) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'scheduleDateAndTime must be a valid date');
+  }
+
+  if (scheduled <= new Date()) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'scheduleDateAndTime must be a future date and time');
+  }
+
+  const announcement = await announcementService.updateAnnouncementById(
+    req.params.announcementId,
+    { scheduleDateAndTime: scheduled }
+  );
+
+  res.send(announcement);
+});
 
 /**
  * DELETE /announcements/:announcementId
@@ -71,14 +100,11 @@ const deleteAnnouncement = catchAsync(async (req, res) => {
 
 /**
  * POST /announcements/:announcementId/images
- * Append one or more images to an existing   announcement.
- * Accepts multipart/form-data with an 'images' file field,
- * or a JSON body with { images: [{imgName, imgUrl}] }.
+ * Append one or more images to an existing announcement.
  */
 const addImages = catchAsync(async (req, res) => {
   let images = Array.isArray(req.body.images) ? req.body.images : [];
 
-  // Merge any uploaded files
   if (req.files && req.files.length > 0) {
     images = [...images, ...mapUploadedFiles(req.files)];
   }
@@ -111,6 +137,7 @@ module.exports = {
   getAnnouncements,
   getAnnouncement,
   updateAnnouncement,
+  scheduleAnnouncement,
   deleteAnnouncement,
   addImages,
   removeImage,

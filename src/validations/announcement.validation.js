@@ -22,6 +22,8 @@ const getAnnouncements = {
     title:    Joi.string(),
     // free-text search across title, description, content
     search:   Joi.string(),
+    // status filter
+    status:   Joi.string().valid('draft', 'scheduled', 'published').optional(),
     // date range filter on scheduleDateAndTime
     fromDate: Joi.date().iso().optional(),
     toDate:   Joi.date().iso().optional().when('fromDate', {

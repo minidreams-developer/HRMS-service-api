@@ -15,6 +15,18 @@ const announcementSchema = new mongoose.Schema(
     scheduleDateAndTime: {
       type: Date,
     },
+    // draft     — saved but not yet scheduled
+    // scheduled — has a future scheduleDateAndTime, waiting to be published
+    // published — visible to all users (either immediately or after schedule)
+    status: {
+      type: String,
+      enum: ['draft', 'scheduled', 'published'],
+      default: 'draft',
+    },
+    publishedAt: {
+      type: Date,
+      default: null,
+    },
     images: [
       {
         imgName: {

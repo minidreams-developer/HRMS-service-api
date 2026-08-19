@@ -5,7 +5,9 @@ const catchAsync = require('../utils/catchAsync');
 const { userService } = require('../services');
 
 const registerEmployee = catchAsync(async (req, res) => {
+  console.log('[registerEmployee] req.body:', JSON.stringify(req.body, null, 2));
   const user = await userService.registerEmployee(req.body);
+  console.log('[registerEmployee] created user:', user._id, user.employeeId);
   res.status(httpStatus.CREATED).send(user);
 });
 
@@ -144,7 +146,10 @@ const getUser = catchAsync(async (req, res) => {
 });
 
 const updateUser = catchAsync(async (req, res) => {
+  console.log('[updateUser] userId:', req.params.userId);
+  console.log('[updateUser] req.body:', JSON.stringify(req.body, null, 2));
   const user = await userService.updateUserById(req.params.userId, req.body);
+  console.log('[updateUser] updated user:', user._id, user.employeeId);
   res.send(user);
 });
 

@@ -1,6 +1,6 @@
 const mongoose = require("mongoose");
 
-const assestSchema = {
+const assestSchema = new mongoose.Schema({
   assetName: {
     type: String,
   },
@@ -36,7 +36,12 @@ const assestSchema = {
   returnDate: {
     type: Date,
   },
-};
+  assignedTo: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User",
+    default: null,
+  },
+}, { timestamps: true });
 
 const Asset = mongoose.model("Asset", assestSchema);
 module.exports = Asset;
