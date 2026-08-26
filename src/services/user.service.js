@@ -1,8 +1,9 @@
 const httpStatus = require('http-status');
 const { User, Address, BankDetails, SalaryDetails } = require('../models');
 const EmergencyContact = require('../models/emergencyContact.model');
+const UserDocument = require('../models/userDocuments.model');
 const ApiError = require('../utils/ApiError');
-const { generateEmployeeId: generateId } = require('../utils/employeeId');
+const { generateEmployeeId: generateId, generateStaffId: generateStaffIdUtil, generateAgentId: generateAgentIdUtil } = require('../utils/employeeId');
 const { setPending, getPending, clearPending } = require('../utils/pendingCode');
 const mongoose = require('mongoose');
 
@@ -17,6 +18,10 @@ const toObjectId = (val) => {
   }
   return val;
 };
+
+const EMP_ID_KEY  = 'employeeId';
+const STAFF_ID_KEY = 'staffId';
+const AGENT_ID_KEY = 'agentId';
 
 /**
  * Register a full employee with all related sub-documents
@@ -62,11 +67,17 @@ const registerEmployee = async (body) => {
     }
   }
 
-  // 5. Build and create user — use pending employeeId if available
-  let employeeId = getPending(EMP_ID_KEY);
+  // 5. Resolve employeeId:
+  //    - Use body.employeeId if provided (frontend already called generate-employeeId)
+  //    - Otherwise use pending or generate a new one
+  let employeeId = body.employeeId;
   if (!employeeId) {
-    employeeId = generateId();
+    employeeId = getPending(EMP_ID_KEY);
+    if (!employeeId) {
+      employeeId = generateId();
+    }
   }
+
   const userData = {
     name: body.name,
     email: body.email,
@@ -76,13 +87,14 @@ const registerEmployee = async (body) => {
     gender: body.gender,
     dateOfBirth: body.dateOfBirth,
     age: body.age,
-    spokenLanguages: body.spokenLanguages,
+    spokenLanguages: body.spokenLanguages || [],
     martialStatus: body.martialStatus,
     motherTongue: body.motherTongue,
     identificationMark: body.identificationMark,
     religion: body.religion,
     documentNo: body.documentNo,
     profilePic: body.profilePic,
+    isActive: body.isActive || 'Active',
     employeeId,
     address: addressIds,
     emergencyContact: emergencyContactIds,
@@ -99,7 +111,13 @@ const registerEmployee = async (body) => {
       bankDetails: bankDetailIds,
       SalaryDetails: salaryDetailsId,
       userRemarks: body.workInformation?.userRemarks,
-      designation: body.workInformation?.designation,
+      designation: body.workInformation?.designation || 'employee',
+      workExperience: body.workInformation?.workExperience,
+      totalExperience: body.workInformation?.totalExperience,
+      lastCompanyName: body.workInformation?.lastCompanyName,
+      lastCompanyExperience: body.workInformation?.lastCompanyExperience,
+      location: body.workInformation?.location,
+      reference: body.workInformation?.reference,
     },
   };
 
@@ -204,6 +222,15 @@ const queryUsers = async (filter, options, advancedFilters = {}) => {
   // Shift filter
   if (advancedFilters.shiftId && isObjectId(advancedFilters.shiftId)) {
     mongoFilter['workInformation.shiftId'] = new mongoose.Types.ObjectId(advancedFilters.shiftId);
+  }
+
+  // Contract agent filter — supports both ObjectId and plain string like "agent_1"
+  if (advancedFilters.contractAgent) {
+    if (isObjectId(advancedFilters.contractAgent)) {
+      mongoFilter['workInformation.contractAgent'] = new mongoose.Types.ObjectId(advancedFilters.contractAgent);
+    } else {
+      mongoFilter['workInformation.contractAgent'] = advancedFilters.contractAgent;
+    }
   }
 
   // Status filter — maps to isActive String enum: 'Active' | 'In-Active' | 'Relieved'
@@ -358,35 +385,53 @@ const updateUserById = async (userId, updateBody) => {
   }
 
   // Update addresses in place
-  if (updateBody.address?.length) {
-    const existingAddressIds = user.address || [];
-    for (let i = 0; i < updateBody.address.length; i++) {
-      const addrData = updateBody.address[i];
-      
-      if (existingAddressIds[i]) {
-        await Address.findByIdAndUpdate(existingAddressIds[i], addrData);
+  // Frontend sends 'addresses' (plural), model stores as 'address'
+  const addressPayload = updateBody.addresses || updateBody.address;
+  if (addressPayload?.length) {
+    const existingAddressIds = user.address?.map(a => a._id || a) || [];
+    const updatedAddressIds = [];
+
+    for (let i = 0; i < addressPayload.length; i++) {
+      const addrData = addressPayload[i];
+      const existingId = addrData.id || addrData._id || existingAddressIds[i];
+
+      if (existingId) {
+        const { id, _id, ...cleanData } = addrData;
+        await Address.findByIdAndUpdate(existingId, cleanData);
+        updatedAddressIds.push(existingId);
       } else {
         const created = await Address.create(addrData);
-        existingAddressIds.push(created._id);
+        updatedAddressIds.push(created._id);
       }
     }
-    updateBody.address = existingAddressIds;
+    updateBody.address = updatedAddressIds;
+    delete updateBody.addresses; // remove plural key so it doesn't confuse mongoose
   }
 
   // Update emergency contacts in place
-  if (updateBody.emergencyContact?.length) {
-    const existingECIds = user.emergencyContact || [];
-    for (let i = 0; i < updateBody.emergencyContact.length; i++) {
-      const ecData = updateBody.emergencyContact[i];
-      
-      if (existingECIds[i]) {
-        await EmergencyContact.findByIdAndUpdate(existingECIds[i], ecData);
+  // Frontend sends 'emergencyContacts' (plural), model stores as 'emergencyContact'
+  const ecPayload = updateBody.emergencyContacts || updateBody.emergencyContact;
+  if (ecPayload?.length) {
+    const existingECIds = user.emergencyContact?.map(e => e._id || e) || [];
+    const updatedECIds = [];
+
+    for (let i = 0; i < ecPayload.length; i++) {
+      const ecData = ecPayload[i];
+      const existingId = ecData.id || ecData._id || existingECIds[i];
+
+      if (existingId) {
+        const { id, _id, ...cleanData } = ecData;
+        await EmergencyContact.findByIdAndUpdate(existingId, cleanData);
+        updatedECIds.push(existingId);
       } else {
-        const created = await EmergencyContact.create(ecData);
-        existingECIds.push(created._id);
+        // New contact — no id provided, create it
+        const { id, _id, ...cleanData } = ecData;
+        const created = await EmergencyContact.create(cleanData);
+        updatedECIds.push(created._id);
       }
     }
-    updateBody.emergencyContact = existingECIds;
+    updateBody.emergencyContact = updatedECIds;
+    delete updateBody.emergencyContacts; // remove plural key
   }
 
   // ── Deep merge workInformation ─────────────────────────────────────────────
@@ -460,6 +505,64 @@ const generateEmployeeId = async () => {
 };
 
 /**
+ * Generate a unique staffId not already in the database.
+ * Uses STF prefix instead of EMP.
+ * @returns {Promise<string>}
+ */
+const generateStaffId = async () => {
+  const pending = getPending(STAFF_ID_KEY);
+
+  if (pending) {
+    const savedInDb = await User.exists({ employeeId: pending });
+    if (savedInDb) {
+      clearPending(STAFF_ID_KEY);
+    } else {
+      return pending;
+    }
+  }
+
+  let staffId;
+  let exists = true;
+  while (exists) {
+    staffId = generateStaffIdUtil();
+    // eslint-disable-next-line no-await-in-loop
+    exists = await User.exists({ employeeId: staffId });
+  }
+
+  setPending(STAFF_ID_KEY, staffId);
+  return staffId;
+};
+
+/**
+ * Generate a unique agentId not already in the database.
+ * Uses AGT prefix.
+ * @returns {Promise<string>}
+ */
+const generateAgentId = async () => {
+  const pending = getPending(AGENT_ID_KEY);
+
+  if (pending) {
+    const savedInDb = await User.exists({ employeeId: pending });
+    if (savedInDb) {
+      clearPending(AGENT_ID_KEY);
+    } else {
+      return pending;
+    }
+  }
+
+  let agentId;
+  let exists = true;
+  while (exists) {
+    agentId = generateAgentIdUtil();
+    // eslint-disable-next-line no-await-in-loop
+    exists = await User.exists({ employeeId: agentId });
+  }
+
+  setPending(AGENT_ID_KEY, agentId);
+  return agentId;
+};
+
+/**
  * Get distinct department names.
  * Queries the Department collection directly for all department names,
  * then also picks up any plain-string department values stored on users.
@@ -509,6 +612,45 @@ const getDistinctroles = async() =>
 //   const status = mongoose.model('User') 
 // }
 
+/**
+ * Upload documents for a user.
+ * Creates a UserDocument record for each uploaded file and links them to the user.
+ *
+ * @param {ObjectId} userId
+ * @param {Array}    files        - multer file objects (from req.files)
+ * @param {string}   documentType - 'government' | 'personal'
+ * @returns {Promise<User>}
+ */
+const uploadUserDocuments = async (userId, files, documentType = 'personal') => {
+  const user = await getUserById(userId);
+  if (!user) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'User not found');
+  }
+
+  if (!files || files.length === 0) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'No files uploaded');
+  }
+
+  // Create a UserDocument record for each uploaded file
+  const docIds = [];
+  for (const file of files) {
+    const doc = await UserDocument.create({
+      userId,
+      documentName: file.originalname,
+      documentType,
+      fileUrl: file.path, // Cloudinary returns the secure URL in file.path
+    });
+    docIds.push(doc._id);
+  }
+
+  // Link the new document IDs to the user
+  await User.findByIdAndUpdate(userId, {
+    $push: { userDocuments: { $each: docIds } },
+  });
+
+  return getUserById(userId);
+};
+
 module.exports = {
   registerEmployee,
   createUser,
@@ -518,6 +660,9 @@ module.exports = {
   updateUserById,
   deleteUserById,
   generateEmployeeId,
+  generateStaffId,
+  generateAgentId,
+  uploadUserDocuments,
   getDistinctDepartments,
   getDistinctroles,
 };

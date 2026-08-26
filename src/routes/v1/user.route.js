@@ -3,6 +3,7 @@ const userController = require('../../controllers/user.controller');
 const validate = require('../../middlewares/validate');
 const userValidation = require('../../validations/user.validation');
 const agentController = require('../../controllers/agent.controller');
+const { cloudinaryUpload } = require('../../middlewares/upload');
 const router = express.Router();
 // validate(userValidation.registerEmployee), 
 router
@@ -12,6 +13,14 @@ router
 router
   .route('/generate-employeeId')
   .get(userController.generateEmployeeId);
+
+router
+  .route('/generate-staffId')
+  .get(userController.generateStaffId);
+
+router
+  .route('/generate-agentId')
+  .get(userController.generateAgentId);
 
 router
   .route('/')
@@ -26,8 +35,23 @@ router
 router
   .route('/:userId')
   .get(userController.getUser)
-  .patch(userController.updateUser)
+  .patch(
+    cloudinaryUpload('hrms/user-documents', 'any', 10),
+    userController.updateUser
+  )
   .delete(userController.deleteUser);
+
+// ── Document upload ───────────────────────────────────────────────────────────
+// POST /v1/users/:userId/documents
+// Content-Type: multipart/form-data
+// Field name  : any (accepts any field name the frontend uses)
+// Query param : ?documentType=government | personal  (default: personal)
+router
+  .route('/:userId/documents')
+  .post(
+    cloudinaryUpload('hrms/user-documents', 'any', 10),
+    userController.uploadUserDocuments
+  );
 
 module.exports = router;
 

@@ -41,6 +41,12 @@ function generateAgentId(){
   return `${prefix}${randomNumber}`;
 }
 
+function generateStaffId() {
+  const prefix = "STF";
+  const randomNumber = crypto.randomInt(100000, 999999);
+  return `${prefix}${randomNumber}`;
+}
+
 module.exports = {
   generateEmployeeId,
   generateTeamId,
@@ -48,4 +54,5 @@ module.exports = {
   generateBranchId,
   generateShiftId,
   generateAgentId,
+  generateStaffId,
 };

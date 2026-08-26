@@ -6,6 +6,10 @@ const { userService } = require('../services');
 
 const registerEmployee = catchAsync(async (req, res) => {
   console.log('[registerEmployee] req.body:', JSON.stringify(req.body, null, 2));
+  console.log('[registerEmployee] addresses:', req.body.addresses);
+  console.log('[registerEmployee] emergencyContacts:', req.body.emergencyContacts);
+  console.log('[registerEmployee] bankDetails:', req.body.bankDetails);
+  console.log('[registerEmployee] salaryDetails:', req.body.salaryDetails);
   const user = await userService.registerEmployee(req.body);
   console.log('[registerEmployee] created user:', user._id, user.employeeId);
   res.status(httpStatus.CREATED).send(user);
@@ -121,16 +125,17 @@ const getUsers = catchAsync(async (req, res) => {
 
   // Advanced filters handled in the service
   const advancedFilters = {
-    search:       req.query.search       || null,
-    departmentId: req.query.departmentId || null,
-    teamId:       req.query.teamId       || null,
-    branchId:     req.query.branchId     || null,
-    designation:  req.query.designation  || null,
-    shiftId:      req.query.shiftId      || null,
-    gender:       req.query.gender       || null,
-    status:       req.query.status       || null,   // 'Active' | 'In-Active' | 'Relieved'
-    joinedFrom:   req.query.joinedFrom   || null,
-    joinedTo:     req.query.joinedTo     || null,
+    search:        req.query.search        || null,
+    departmentId:  req.query.departmentId  || null,
+    teamId:        req.query.teamId        || null,
+    branchId:      req.query.branchId      || null,
+    designation:   req.query.designation   || null,
+    shiftId:       req.query.shiftId       || null,
+    gender:        req.query.gender        || null,
+    status:        req.query.status        || null,
+    joinedFrom:    req.query.joinedFrom    || null,
+    joinedTo:      req.query.joinedTo      || null,
+    contractAgent: req.query.contractAgent || null,
   };
 
   const result = await userService.queryUsers(filter, options, advancedFilters);
@@ -148,6 +153,14 @@ const getUser = catchAsync(async (req, res) => {
 const updateUser = catchAsync(async (req, res) => {
   console.log('[updateUser] userId:', req.params.userId);
   console.log('[updateUser] req.body:', JSON.stringify(req.body, null, 2));
+  console.log('[updateUser] files:', req.files?.map(f => f.originalname));
+
+  // If files were uploaded alongside the PATCH, save them as user documents
+  if (req.files && req.files.length > 0) {
+    const documentType = req.query.documentType || req.body.documentType || 'personal';
+    await userService.uploadUserDocuments(req.params.userId, req.files, documentType);
+  }
+
   const user = await userService.updateUserById(req.params.userId, req.body);
   console.log('[updateUser] updated user:', user._id, user.employeeId);
   res.send(user);
@@ -163,6 +176,34 @@ const generateEmployeeId = catchAsync(async (req, res) => {
   res.send({ employeeId });
 });
 
+const generateStaffId = catchAsync(async (req, res) => {
+  const staffId = await userService.generateStaffId();
+  res.send({ staffId });
+});
+
+const generateAgentId = catchAsync(async (req, res) => {
+  const agentId = await userService.generateAgentId();
+  res.send({ agentId });
+});
+
+/**
+ * POST /v1/users/:userId/documents
+ * Accepts multipart/form-data with a 'documents' field.
+ * Query param: ?documentType=government | personal (default: personal)
+ */
+const uploadUserDocuments = catchAsync(async (req, res) => {
+  console.log('[uploadUserDocuments] userId:', req.params.userId);
+  console.log('[uploadUserDocuments] files:', req.files?.map(f => f.originalname));
+  console.log('[uploadUserDocuments] documentType:', req.query.documentType);
+
+  const user = await userService.uploadUserDocuments(
+    req.params.userId,
+    req.files,
+    req.query.documentType || 'personal'
+  );
+  res.send(user);
+});
+
 module.exports = {
   registerEmployee,
   createUser,
@@ -170,5 +211,8 @@ module.exports = {
   getUser,
   updateUser,
   deleteUser,
-  generateEmployeeId
+  generateEmployeeId,
+  generateStaffId,
+  generateAgentId,
+  uploadUserDocuments,
 };

@@ -14,6 +14,12 @@ router
   .route('/:assetId/assign/:employeeId')
   .patch(assetController.assignAssetToEmployee);
 
+// Get all assets for a specific employee
+// GET /v1/assets/employee/:employeeId
+router
+  .route('/employee/:employeeId')
+  .get(assetController.getAssetsByEmployee);
+
 router
   .route('/:assetId')
   .get(assetController.getAsset)

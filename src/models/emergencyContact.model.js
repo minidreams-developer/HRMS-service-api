@@ -7,16 +7,22 @@ const emergencyContactSchema = new mongoose.Schema({
     },
     phone: {
         type: Number,
-        trim: true,
+    },
+    mobileNumber: {
+        type: Number,
     },
     relationship: {
         type: String,
         trim: true,
     },
-    address:
-    {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "Address"
+    address: {
+        addressLine1: { type: String, trim: true },
+        addressLine2: { type: String, trim: true },
+        city:         { type: String, trim: true },
+        district:     { type: String, trim: true },
+        state:        { type: String, trim: true },
+        pincode:      { type: Number },
+        country:      { type: String, trim: true },
     },
 });
 

@@ -51,6 +51,18 @@ const assignAssetToEmployee = catchAsync(async (req, res) => {
   res.send(asset);
 });
 
+/**
+ * GET /v1/assets/employee/:employeeId
+ * Get all assets assigned to a specific employee.
+ */
+const getAssetsByEmployee = catchAsync(async (req, res) => {
+  const result = await assetService.queryAssets(
+    { assignedTo: req.params.employeeId },
+    pick(req.query, ['sortBy', 'limit', 'page'])
+  );
+  res.send(result);
+});
+
 module.exports = {
   createAsset,
   getAssets,
@@ -58,4 +70,5 @@ module.exports = {
   updateAsset,
   deleteAsset,
   assignAssetToEmployee,
+  getAssetsByEmployee,
 };
