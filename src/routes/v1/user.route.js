@@ -11,6 +11,10 @@ router
   .post(userController.registerEmployee);
 
 router
+  .route('/count')
+  .get(userController.getEmployeeCount);
+
+router
   .route('/generate-employeeId')
   .get(userController.generateEmployeeId);
 
@@ -23,6 +27,10 @@ router
   .get(userController.generateAgentId);
 
 router
+  .route('/employee/:employeeId')
+  .get(validate(userValidation.getEmployeeByEmpId), userController.getEmployeeByEmpId);
+
+router
   .route('/')
   .post(userController.createUser)
   .get(validate(userValidation.getUsers), userController.getUsers);
@@ -31,6 +39,14 @@ router
   .route('/agent')
   .post(agentController.createAgent)
   .get(agentController.getAgentId);
+
+// GET /v1/users/agent/:agentId/members
+// Returns employees & staff linked to the agent via workInformation.contractAgent
+// with summary counts: total, active, inActive, relieved, newToday
+// Query params: ?page=1&limit=10
+router
+  .route('/agent/:agentId/members')
+  .get(userController.getAgentMembers);
 
 router
   .route('/:userId')

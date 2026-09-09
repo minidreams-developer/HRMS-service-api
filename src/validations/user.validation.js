@@ -38,6 +38,7 @@ const getUsers = {
     branchId:     Joi.string().custom(objectId).optional(),
     designation:  Joi.string().optional(),
     shiftId:      Joi.string().custom(objectId).optional(),
+    contractAgent: Joi.string().optional(),
 
     // ── Status filter — Active | In-Active | Relieved ────────────────────────
     status:       Joi.string().valid('Active', 'In-Active', 'Relieved').optional(),
@@ -87,6 +88,12 @@ const updateUser = {
     .min(1),
 };
 
+const getEmployeeByEmpId = {
+  params: Joi.object().keys({
+    employeeId: Joi.string().required(),
+  }),
+};
+
 const deleteUser = {
   params: Joi.object().keys({
     userId: Joi.string().custom(objectId),
@@ -98,6 +105,7 @@ module.exports = {
   createUser,
   getUsers,
   getUser,
+  getEmployeeByEmpId,
   updateUser,
   deleteUser,
 };

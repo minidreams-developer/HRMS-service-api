@@ -117,6 +117,11 @@ const getUsers = catchAsync(async (req, res) => {
     return res.send({ roles });
   }
 
+  // if(req.query.distinct === 'agent')
+  // {
+  //   const agents = await userService.getDistinctContractAgents();
+  //   return res.send({ agents });
+  // }
   const filter  = pick(req.query, ['name', 'role']);
   const options = pick(req.query, ['sortBy', 'limit', 'page']);
 
@@ -171,6 +176,11 @@ const deleteUser = catchAsync(async (req, res) => {
   res.status(httpStatus.NO_CONTENT).send();
 });
 
+const getEmployeeCount = catchAsync(async (req, res) => {
+  const count = await userService.getEmployeeCount(req.query);
+  res.send(count);
+});
+
 const generateEmployeeId = catchAsync(async (req, res) => {
   const employeeId = await userService.generateEmployeeId();
   res.send({ employeeId });
@@ -204,6 +214,27 @@ const uploadUserDocuments = catchAsync(async (req, res) => {
   res.send(user);
 });
 
+const getEmployeeByEmpId = catchAsync(async (req, res) => {
+  const user = await userService.getUserByEmployeeId(req.params.employeeId);
+  if (!user) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'Employee not found');
+  }
+  res.send(user);
+});
+
+const getAgentMembers = catchAsync(async (req, res) => {
+  const { agentId } = req.params;
+  const options = pick(req.query, ['page', 'limit']);
+  const filters = {
+    status:     req.query.status     || null,
+    joinedFrom: req.query.joinedFrom || null,
+    joinedTo:   req.query.joinedTo   || null,
+    role:       req.query.role       || null,  // optionally scope to 'employee' or 'staff' only
+  };
+  const result = await userService.getAgentMembers(agentId, options, filters);
+  res.send(result);
+});
+
 module.exports = {
   registerEmployee,
   createUser,
@@ -211,8 +242,11 @@ module.exports = {
   getUser,
   updateUser,
   deleteUser,
+  getEmployeeCount,
   generateEmployeeId,
   generateStaffId,
   generateAgentId,
   uploadUserDocuments,
+  getEmployeeByEmpId,
+  getAgentMembers,
 };

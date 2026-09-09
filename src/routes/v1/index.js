@@ -24,6 +24,7 @@ const hierarchyRoute = require('./hierarchy.route');
 const docsRoute = require('./docs.route');
 const config = require('../../config/config');
 const seriesConfiguration = require('./seriesConfiguration.route');
+const mediaRoute = require('./media.route');
 
 const router = express.Router();
 
@@ -131,7 +132,11 @@ const defaultRoutes = [
   {
     path: '/seriesConfiguration',
     route: seriesConfiguration,
-  }
+  },
+  {
+    path: '/media',
+    route: mediaRoute,
+  },
 ];
 
 const devRoutes = [

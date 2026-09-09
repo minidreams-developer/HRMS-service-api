@@ -68,9 +68,30 @@ const queryTeams = async (filter, options) => {
   const result = await Team.paginate(mongoFilter, options);
   await Team.populate(result.results, { path: 'department', select: 'departmentName' });
   await Team.populate(result.results, { path: 'teamLead', select: 'name' });
+
+  // Get accurate member counts from the User collection
+  const teamIds = result.results.map((t) => t._id);
+  const memberCounts = await User.aggregate([
+    {
+      $match: {
+        'workInformation.team': { $in: teamIds },
+      },
+    },
+    {
+      $group: {
+        _id: '$workInformation.team',
+        count: { $sum: 1 },
+      },
+    },
+  ]);
+  const countMap = {};
+  for (const row of memberCounts) {
+    if (row._id) countMap[String(row._id)] = row.count;
+  }
+
   result.results = result.results.map((team) => {
     const t = team.toJSON ? team.toJSON() : team;
-    t.totalUsers = Array.isArray(t.teamEmployees) ? t.teamEmployees.length : 0;
+    t.totalUsers = countMap[String(t.id)] || (Array.isArray(t.teamEmployees) ? t.teamEmployees.length : 0);
     return t;
   });
   return result;
@@ -87,7 +108,8 @@ const getTeamById = async (id) => {
     .populate('teamLead', 'name');
   if (!team) return null;
   const t = team.toJSON();
-  t.totalUsers = Array.isArray(t.teamEmployees) ? t.teamEmployees.length : 0;
+  const memberCount = await User.countDocuments({ 'workInformation.team': team._id });
+  t.totalUsers = memberCount || (Array.isArray(t.teamEmployees) ? t.teamEmployees.length : 0);
   return t;
 };
 
@@ -98,7 +120,7 @@ const getTeamById = async (id) => {
  * @returns {Promise<Team>}
  */
 const updateTeamById = async (id, updateBody) => {
-  const team = await getTeamById(id);
+  const team = await Team.findById(id);
   if (!team) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Team not found');
   }
@@ -113,11 +135,11 @@ const updateTeamById = async (id, updateBody) => {
  * @returns {Promise<Team>}
  */
 const deleteTeamById = async (id) => {
-  const team = await getTeamById(id);
+  const team = await Team.findById(id);
   if (!team) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Team not found');
   }
-  await team.remove();
+  await team.deleteOne();
   return team;
 };
 

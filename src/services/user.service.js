@@ -34,9 +34,16 @@ const registerEmployee = async (body) => {
   }
 
   // 1. Create addresses
+  // Accept both 'address' (singular, array) and 'addresses' (plural) from the frontend
   const addressIds = [];
-  if (body.addresses && body.addresses.length) {
-    for (const addr of body.addresses) {
+  const rawAddresses = body.addresses || body.address || [];
+  const addressList = Array.isArray(rawAddresses) ? rawAddresses : [rawAddresses];
+  for (const addr of addressList) {
+    if (!addr) continue;
+    if (typeof addr === 'string') {
+      // already an ObjectId ref
+      addressIds.push(addr);
+    } else {
       const created = await Address.create(addr);
       addressIds.push(created._id);
     }
@@ -44,9 +51,21 @@ const registerEmployee = async (body) => {
 
   // 2. Create emergency contacts
   const emergencyContactIds = [];
-  if (body.emergencyContacts && body.emergencyContacts.length) {
-    for (const ec of body.emergencyContacts) {
-      const created = await EmergencyContact.create(ec);
+  const rawContacts = body.emergencyContacts || body.emergencyContact || [];
+  for (const ec of rawContacts) {
+    if (!ec) continue;
+    if (typeof ec === 'string') {
+      emergencyContactIds.push(ec); // already an ObjectId ref
+    } else {
+      // If the contact has a nested address object, save it first
+      let ecAddressId;
+      if (ec.address && typeof ec.address === 'object') {
+        const ecAddr = await Address.create(ec.address);
+        ecAddressId = ecAddr._id;
+      } else {
+        ecAddressId = ec.address;
+      }
+      const created = await EmergencyContact.create({ ...ec, address: ecAddressId });
       emergencyContactIds.push(created._id);
     }
   }
@@ -96,6 +115,9 @@ const registerEmployee = async (body) => {
     profilePic: body.profilePic,
     isActive: body.isActive || 'Active',
     employeeId,
+    agentId: body.agentId,
+    branch: body.branch,
+    referenceDetails: body.referenceDetails,
     address: addressIds,
     emergencyContact: emergencyContactIds,
     workInformation: {
@@ -121,8 +143,33 @@ const registerEmployee = async (body) => {
     },
   };
 
-  return User.create(userData).then((user) => {
+  return User.create(userData).then(async (user) => {
     clearPending(EMP_ID_KEY);
+
+    // Save documentImage[] if provided (pre-uploaded Cloudinary URLs)
+    const rawDocs = body.documentImage || [];
+    if (rawDocs.length > 0) {
+      const docIds = [];
+      for (const doc of rawDocs) {
+        if (!doc || !doc.fileUrl) continue;
+        const created = await UserDocument.create({
+          userId: user._id,
+          documentName: doc.documentName || doc.fileName || 'Unnamed',
+          documentType: doc.documentType || 'personal',
+          fileUrl: doc.fileUrl,
+          fileName: doc.fileName,
+          publicId: doc.publicId,
+          mimeType: doc.mimeType,
+          keepOriginal: doc.keepOriginal || false,
+        });
+        docIds.push(created._id);
+      }
+      if (docIds.length > 0) {
+        user.userDocuments = docIds;
+        await user.save();
+      }
+    }
+
     return user;
   });
 };
@@ -150,8 +197,7 @@ const populateWorkInfo = async (docs) => {
     { path: 'workInformation.branch',     model: 'Branch' },
     { path: 'workInformation.shiftId',    model: 'Shift' },
     { path: 'workInformation.reportingPerson', model: 'User', select: 'name employeeId email' },
-    { path: 'workInformation.contractAgent',   model: 'Agent' },
-    { path: 'workInformation.jobItems',        model: 'Contractor' },
+    { path: 'workInformation.jobItems',   model: 'Contractor' },
   ];
 
   for (const doc of docs) {
@@ -286,6 +332,39 @@ const queryUsers = async (filter, options, advancedFilters = {}) => {
     { path: 'workInformation.bankDetails' },
   ]);
   await populateWorkInfo(result.results);
+
+  // ── If listing agents, attach memberCount (employee + staff) per agent ──
+  if (filter.role === 'agent' && result.results.length > 0) {
+    const agentIds = result.results.map((a) => a._id);
+
+    // Single aggregation: count employees/staff grouped by contractAgent
+    const memberCounts = await User.aggregate([
+      {
+        $match: {
+          role: { $in: ['employee', 'staff'] },
+          'workInformation.contractAgent': { $in: agentIds },
+        },
+      },
+      {
+        $group: {
+          _id: '$workInformation.contractAgent',
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+
+    // Build a lookup map: agentId (string) → count
+    const countMap = {};
+    for (const row of memberCounts) {
+      if (row._id) countMap[String(row._id)] = row.count;
+    }
+
+    // Attach memberCount to each agent doc
+    for (const agent of result.results) {
+      agent.memberCount = countMap[String(agent._id)] || 0;
+    }
+  }
+
   return result;
 };
 
@@ -296,6 +375,22 @@ const queryUsers = async (filter, options, advancedFilters = {}) => {
  */
 const getUserById = async (id) => {
   const user = await User.findById(id)
+    .populate('address')
+    .populate('emergencyContact')
+    .populate('userDocuments')
+    .populate('workInformation.SalaryDetails')
+    .populate('workInformation.bankDetails');
+  if (user) await populateWorkInfo([user]);
+  return user;
+};
+
+/**
+ * Get user by employeeId (e.g. EMP001, STF001, AGT001)
+ * @param {string} employeeId
+ * @returns {Promise<User>}
+ */
+const getUserByEmployeeId = async (employeeId) => {
+  const user = await User.findOne({ employeeId })
     .populate('address')
     .populate('emergencyContact')
     .populate('userDocuments')
@@ -432,6 +527,31 @@ const updateUserById = async (userId, updateBody) => {
     }
     updateBody.emergencyContact = updatedECIds;
     delete updateBody.emergencyContacts; // remove plural key
+  }
+
+  // ── Save documentImage[] sent as JSON (pre-uploaded URLs from Cloudinary) ─
+  if (updateBody.documentImage && updateBody.documentImage.length > 0) {
+    const docIds = [];
+    for (const doc of updateBody.documentImage) {
+      if (!doc || !doc.fileUrl) continue;
+      const created = await UserDocument.create({
+        userId,
+        documentName: doc.documentName || doc.fileName || 'Unnamed',
+        documentType: doc.documentType || 'personal',
+        fileUrl: doc.fileUrl,
+        fileName: doc.fileName,
+        publicId: doc.publicId,
+        mimeType: doc.mimeType,
+        keepOriginal: doc.keepOriginal || false,
+      });
+      docIds.push(created._id);
+    }
+    if (docIds.length > 0) {
+      await User.findByIdAndUpdate(userId, {
+        $push: { userDocuments: { $each: docIds } },
+      });
+    }
+    delete updateBody.documentImage; // don't pass it further to Object.assign
   }
 
   // ── Deep merge workInformation ─────────────────────────────────────────────
@@ -651,11 +771,152 @@ const uploadUserDocuments = async (userId, files, documentType = 'personal') => 
   return getUserById(userId);
 };
 
+/**
+ * Get employee/staff stats — total, active, inactive, new (joined this month).
+ * Pass ?role=employee or ?role=staff to scope the stats.
+ * Also supports: branchId, departmentId, teamId filters.
+ * @returns {Promise<Object>}
+ */
+const getEmployeeCount = async (filters = {}) => {
+  const baseQuery = {};
+
+  // Role filter — defaults to 'employee' if not provided
+  baseQuery.role = filters.role || 'employee';
+
+  // Optional filters
+  if (filters.departmentId && isObjectId(filters.departmentId)) {
+    baseQuery['workInformation.department'] = toObjectId(filters.departmentId);
+  }
+  if (filters.teamId && isObjectId(filters.teamId)) {
+    baseQuery['workInformation.team'] = toObjectId(filters.teamId);
+  }
+  if (filters.branchId && isObjectId(filters.branchId)) {
+    baseQuery['workInformation.branch'] = toObjectId(filters.branchId);
+  }
+
+  // "New this month" — joined in the current calendar month
+  const now = new Date();
+  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const monthEnd   = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0, 23, 59, 59, 999));
+
+  const [total, active, inactive, relieved, newThisMonth] = await Promise.all([
+    User.countDocuments({ ...baseQuery }),
+    User.countDocuments({ ...baseQuery, isActive: 'Active' }),
+    User.countDocuments({ ...baseQuery, isActive: 'In-Active' }),
+    User.countDocuments({ ...baseQuery, isActive: 'Relieved' }),
+    User.countDocuments({
+      ...baseQuery,
+      'workInformation.joinedDate': { $gte: monthStart, $lte: monthEnd },
+    }),
+  ]);
+
+  return {
+    role: baseQuery.role,
+    total,
+    active,
+    inactive,
+    relieved,
+    newThisMonth,
+  };
+};
+
+/**
+ * Get all employees & staff under a specific agent (by agent's _id or agentId string),
+ * along with summary counts: total, active, inactive, relieved, and new today.
+ *
+ * "New today" = joinedDate falls within today's calendar day (UTC).
+ *
+ * @param {string} agentId   - The agent's MongoDB _id OR agentId string (e.g. "AGT804660")
+ * @param {Object} options   - Pagination: { page, limit }
+ * @param {Object} filters   - { status, joinedFrom, joinedTo, role }
+ * @returns {Promise<Object>}
+ */
+const getAgentMembers = async (agentId, options = {}, filters = {}) => {
+  // Build the contractAgent match — support both ObjectId and plain string agentId
+  const contractAgentMatch = isObjectId(agentId)
+    ? new mongoose.Types.ObjectId(agentId)
+    : agentId;
+
+  // ── Base filter: only employee/staff belonging to this agent ────────────
+  const baseFilter = {
+    role: filters.role && ['employee', 'staff'].includes(filters.role)
+      ? filters.role
+      : { $in: ['employee', 'staff'] },
+    'workInformation.contractAgent': contractAgentMatch,
+  };
+
+  // ── Summary counts always use the base filter (no status/date applied) ──
+  const now = new Date();
+  const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
+  const todayEnd   = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 23, 59, 59, 999));
+
+  const [total, active, inActive, relieved, newToday] = await Promise.all([
+    User.countDocuments(baseFilter),
+    User.countDocuments({ ...baseFilter, isActive: 'Active' }),
+    User.countDocuments({ ...baseFilter, isActive: 'In-Active' }),
+    User.countDocuments({ ...baseFilter, isActive: 'Relieved' }),
+    User.countDocuments({
+      ...baseFilter,
+      'workInformation.joinedDate': { $gte: todayStart, $lte: todayEnd },
+    }),
+  ]);
+
+  // ── List filter: apply optional status + joined date range ──────────────
+  const listFilter = { ...baseFilter };
+
+  if (filters.status) {
+    listFilter.isActive = filters.status; // 'Active' | 'In-Active' | 'Relieved'
+  }
+
+  if (filters.joinedFrom || filters.joinedTo) {
+    listFilter['workInformation.joinedDate'] = {};
+    if (filters.joinedFrom) {
+      listFilter['workInformation.joinedDate'].$gte = new Date(filters.joinedFrom);
+    }
+    if (filters.joinedTo) {
+      const endDate = new Date(filters.joinedTo);
+      endDate.setUTCHours(23, 59, 59, 999);
+      listFilter['workInformation.joinedDate'].$lte = endDate;
+    }
+  }
+
+  // ── Paginated member list ────────────────────────────────────────────────
+  const limit = parseInt(options.limit, 10) > 0 ? parseInt(options.limit, 10) : 10;
+  const page  = parseInt(options.page,  10) > 0 ? parseInt(options.page,  10) : 1;
+
+  const paginateResult = await User.paginate(listFilter, {
+    limit,
+    page,
+    sort: { createdAt: -1 },
+  });
+
+  // Populate sub-documents
+  await User.populate(paginateResult.results, [
+    { path: 'address' },
+    { path: 'emergencyContact' },
+    { path: 'workInformation.SalaryDetails' },
+    { path: 'workInformation.bankDetails' },
+  ]);
+  await populateWorkInfo(paginateResult.results);
+
+  return {
+    summary: {
+      total,
+      active,
+      inActive,
+      relieved,
+      newToday,
+    },
+    ...paginateResult,
+  };
+};
+
 module.exports = {
   registerEmployee,
   createUser,
   queryUsers,
   getUserById,
+  getUserByEmployeeId,
   getUserByEmail,
   updateUserById,
   deleteUserById,
@@ -663,6 +924,8 @@ module.exports = {
   generateStaffId,
   generateAgentId,
   uploadUserDocuments,
+  getEmployeeCount,
   getDistinctDepartments,
   getDistinctroles,
+  getAgentMembers,
 };
