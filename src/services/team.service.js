@@ -187,7 +187,8 @@ const generateUniqueTeamId = async () => {
  * @returns {Promise<Team>}
  */
 const addMemberToTeam = async (teamId, userId) => {
-  const team = await getTeamById(teamId);
+  // Use the Mongoose document here because this operation persists changes.
+  const team = await Team.findById(teamId);
   if (!team) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Team not found');
   }
@@ -195,6 +196,9 @@ const addMemberToTeam = async (teamId, userId) => {
   const user = await User.findById(userId);
   if (!user) {
     throw new ApiError(httpStatus.NOT_FOUND, 'User not found');
+  }
+  if (user.isDeleted) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Cannot assign a deleted user to a team');
   }
 
   // Check if user is already in the team

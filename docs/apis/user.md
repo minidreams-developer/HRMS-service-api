@@ -74,7 +74,7 @@ Creates a minimal user account (admin use).
 | `name`     | `string` | yes      | Full name                                       |
 | `email`    | `string` | yes      | Unique email address                            |
 | `password` | `string` | yes      | Min 8 chars, must contain a letter and a number |
-| `role`     | `string` | yes      | `user` or `admin`                               |
+| `role`     | `string` | yes      | `employee`, `hr_manager`, `team_lead`, `agent`, `staff`, `manager`, `subAdmin`, `admin`, or `contractor` |
 
 ### Response `201`
 
@@ -271,8 +271,7 @@ All fields optional, at least one required.
 | `documentNo`         | `object`   | `aadharNo`, `panNo`                              |
 | `workInformation`    | `object`   | Work details (designation, department, etc.)     |
 | `approvalStatus`     | `string`   | `pending` \| `approved` \| `rejected`            |
-| `isActive`           | `boolean`  | Active status                                    |
-| `firebaseToken`      | `string`   | Firebase push notification token                 |
+| `isActive`           | `string`   | `Active`, `In-Active`, or `Relieved`             |
 
 ### Response `200`
 Returns the updated user object (same shape as Get User by ID).

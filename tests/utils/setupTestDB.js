@@ -3,7 +3,11 @@ const config = require('../../src/config/config');
 
 const setupTestDB = () => {
   beforeAll(async () => {
-    await mongoose.connect(config.mongoose.url, config.mongoose.options);
+    await mongoose.connect(config.mongoose.url, {
+      ...config.mongoose.options,
+      // Fail quickly with a useful test-environment error if MongoDB is unavailable.
+      serverSelectionTimeoutMS: 5000,
+    });
   });
 
   beforeEach(async () => {

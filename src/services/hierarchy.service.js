@@ -100,13 +100,13 @@ const buildTree = (parentId, userMap, childMap, visited = new Set()) => {
 const getHierarchyTree = async ({ rootId = null, maxDepth = 0 } = {}) => {
   // Single query — fetch all active employees
   const users = await User.find(
-    { isActive: true, role: { $ne: 'admin' } },
+    { isActive: 'Active', isDeleted: { $ne: true }, role: { $ne: 'admin' } },
     NODE_SELECT,
   ).lean();
 
   // Also fetch admin/subAdmin as possible roots
   const topUsers = await User.find(
-    { isActive: true, role: { $in: ['admin', 'subAdmin'] } },
+    { isActive: 'Active', isDeleted: { $ne: true }, role: { $in: ['admin', 'subAdmin'] } },
     NODE_SELECT,
   ).lean();
 
@@ -182,7 +182,7 @@ const getHierarchyTree = async ({ rootId = null, maxDepth = 0 } = {}) => {
  * Useful for the flat role-hierarchy panel.
  */
 const getHierarchyByRole = async () => {
-  const users = await User.find({ isActive: true }, NODE_SELECT).lean();
+  const users = await User.find({ isActive: 'Active', isDeleted: { $ne: true } }, NODE_SELECT).lean();
 
   const grouped = {};
   for (const role of ROLE_ORDER) {

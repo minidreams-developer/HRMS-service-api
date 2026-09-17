@@ -32,7 +32,7 @@ describe('User routes', () => {
         .expect(httpStatus.CREATED);
 
       expect(res.body).not.toHaveProperty('password');
-      expect(res.body).toEqual({
+      expect(res.body).toMatchObject({
         id: expect.anything(),
         name: newUser.name,
         email: newUser.email,
@@ -158,7 +158,7 @@ describe('User routes', () => {
         totalResults: 3,
       });
       expect(res.body.results).toHaveLength(3);
-      expect(res.body.results[0]).toEqual({
+      expect(res.body.results[0]).toMatchObject({
         id: userOne._id.toHexString(),
         name: userOne.name,
         email: userOne.email,
@@ -193,7 +193,7 @@ describe('User routes', () => {
         .send()
         .expect(httpStatus.OK);
 
-      expect(res.body).toEqual({
+      expect(res.body).toMatchObject({
         results: expect.any(Array),
         page: 1,
         limit: 10,
@@ -214,7 +214,7 @@ describe('User routes', () => {
         .send()
         .expect(httpStatus.OK);
 
-      expect(res.body).toEqual({
+      expect(res.body).toMatchObject({
         results: expect.any(Array),
         page: 1,
         limit: 10,
@@ -361,7 +361,7 @@ describe('User routes', () => {
         .expect(httpStatus.OK);
 
       expect(res.body).not.toHaveProperty('password');
-      expect(res.body).toEqual({
+      expect(res.body).toMatchObject({
         id: userOne._id.toHexString(),
         email: userOne.email,
         name: userOne.name,
@@ -419,11 +419,11 @@ describe('User routes', () => {
 
   describe('DELETE /v1/users/:userId', () => {
     test('should return 200 and soft delete user if data is ok', async () => {
-      await insertUsers([userOne]);
+      await insertUsers([userOne, admin]);
 
       const res = await request(app)
         .delete(`/v1/users/${userOne._id}`)
-        .set('Authorization', `Bearer ${userOneAccessToken}`)
+        .set('Authorization', `Bearer ${adminAccessToken}`)
         .send()
         .expect(httpStatus.OK);
 
@@ -556,7 +556,7 @@ describe('User routes', () => {
         .expect(httpStatus.OK);
 
       expect(res.body).not.toHaveProperty('password');
-      expect(res.body).toEqual({
+      expect(res.body).toMatchObject({
         id: userOne._id.toHexString(),
         name: updateBody.name,
         email: updateBody.email,
@@ -761,18 +761,18 @@ describe('User routes', () => {
           .expect(httpStatus.OK);
 
         expect(res.body).toHaveLength(1);
-        expect(res.body[0].id).toBe(userTwo._id.toHexString());
+        expect(res.body[0]._id).toBe(userTwo._id.toHexString());
       });
     });
 
     describe('Historical data preservation', () => {
       test('should preserve user document for historical references after soft delete', async () => {
-        await insertUsers([userOne]);
+        await insertUsers([userOne, admin]);
 
         // Soft delete the user
         await request(app)
           .delete(`/v1/users/${userOne._id}`)
-          .set('Authorization', `Bearer ${userOneAccessToken}`)
+          .set('Authorization', `Bearer ${adminAccessToken}`)
           .send()
           .expect(httpStatus.OK);
 

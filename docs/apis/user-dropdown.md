@@ -8,7 +8,7 @@ This API provides a lightweight dropdown endpoint for fetching users filtered by
 ### Get Users for Dropdown
 **GET** `/v1/users/dropdown`
 
-Returns a list of users with minimal information, filtered by role and optional search term.
+Returns a list of users with minimal information, filtered by role and optional search term. The identifier is `_id` (not `id`).
 
 #### Query Parameters
 

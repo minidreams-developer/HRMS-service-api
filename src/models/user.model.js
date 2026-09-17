@@ -187,6 +187,7 @@ const userSchema = mongoose.Schema(
     firebaseToken: {
       type: String,
       default: null,
+      private: true,
     },
 
     isEmailVerified: {

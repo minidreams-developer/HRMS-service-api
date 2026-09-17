@@ -12,7 +12,7 @@ components:
           type: string
         role:
           type: string
-          enum: [user, admin]
+          enum: [employee, hr_manager, team_lead, agent, staff, manager, subAdmin, admin, contractor]
       example:
         id: 5ebac534954b54139806c112
         email: fake@example.com

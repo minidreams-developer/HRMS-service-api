@@ -4,6 +4,7 @@ const validate = require('../../middlewares/validate');
 const userValidation = require('../../validations/user.validation');
 const agentController = require('../../controllers/agent.controller');
 const { cloudinaryUpload } = require('../../middlewares/upload');
+const auth = require('../../middlewares/auth');
 const router = express.Router();
 // validate(userValidation.registerEmployee), 
 router
@@ -39,8 +40,8 @@ router
 
 router
   .route('/')
-  .post(userController.createUser)
-  .get(validate(userValidation.getUsers), userController.getUsers);
+  .post(auth('manageUsers'), validate(userValidation.createUser), userController.createUser)
+  .get(auth('getUsers'), validate(userValidation.getUsers), userController.getUsers);
 
 router
   .route('/agent')
@@ -57,12 +58,14 @@ router
 
 router
   .route('/:userId')
-  .get(userController.getUser)
+  .get(auth('getUsers'), userController.getUser)
   .patch(
+    auth('manageUsers'),
+    validate(userValidation.updateUser),
     cloudinaryUpload('hrms/user-documents', 'any', 10),
     userController.updateUser
   )
-  .delete(userController.deleteUser);
+  .delete(auth('manageUsers'), userController.deleteUser);
 
 // ── Document upload/link ──────────────────────────────────────────────────────
 // POST /v1/users/:userId/documents
