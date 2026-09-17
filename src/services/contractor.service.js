@@ -175,8 +175,7 @@ const registerContractor = async (body) => {
       branch: body.workInformation?.branch,
       reportingPerson: body.workInformation?.reportingPerson,
       designation: 'contractor',
-      // Link the first job item as the primary reference (keeps backward-compat)
-      jobItems: jobItemIds.length > 0 ? jobItemIds[0] : undefined,
+      jobItems: jobItemIds,
     },
   };
 
@@ -201,7 +200,7 @@ const queryContractors = async (filter, options) => {
   await User.populate(result.results, [
     { path: 'address' },
     { path: 'emergencyContact' },
-    { path: 'workInformation.jobItems' },
+    { path: 'workInformation.jobItems', select: 'jobItems unit price region' },
   ]);
 
   // Populate branch and reportingPerson only when they are valid ObjectIds
@@ -236,7 +235,9 @@ const getContractorById = async (id) => {
   const contractor = await User.findOne(query)
     .populate('address')
     .populate('emergencyContact')
-    .populate('workInformation.jobItems');
+    .populate('userDocuments')
+    .populate({ path: 'workInformation.jobItems', select: 'jobItems unit price region' })
+    .populate('workInformation.bankDetails');
 
   if (!contractor) return null;
 

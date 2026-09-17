@@ -12,6 +12,8 @@ router
 
 router.route('/generate-id').get(branchController.generateBranchId);
 
+router.route('/dropdown').get(branchController.getBranchDropdown);
+
 router
   .route('/:branchId')
   .get(validate(branchValidation.getBranch), branchController.getBranch)

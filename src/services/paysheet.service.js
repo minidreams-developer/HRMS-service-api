@@ -261,7 +261,11 @@ const generatePaysheet = async (month, year, organizationId = null) => {
   if (organizationId) matchStage.organizationId = new mongoose.Types.ObjectId(organizationId);
 
   const [employeeCount, processedPayrolls, lastPayroll] = await Promise.all([
-    User.countDocuments({ role: { $ne: 'admin' }, isActive: true }),
+    User.countDocuments({ 
+      role: { $ne: 'admin' }, 
+      isActive: true,
+      isDeleted: { $ne: true } // Exclude soft-deleted users
+    }),
     Payroll.countDocuments({ ...matchStage, status: { $in: ['processed', 'paid'] } }),
     Payroll.findOne(matchStage).sort({ updatedAt: -1 }).select('updatedAt').lean()
   ]);

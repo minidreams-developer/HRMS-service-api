@@ -18,7 +18,7 @@ describe('User routes', () => {
         name: faker.name.findName(),
         email: faker.internet.email().toLowerCase(),
         password: 'password1',
-        role: 'user',
+        role: 'employee',
       };
     });
 
@@ -128,7 +128,7 @@ describe('User routes', () => {
         .expect(httpStatus.BAD_REQUEST);
     });
 
-    test('should return 400 error if role is neither user nor admin', async () => {
+    test('should return 400 error if role is invalid', async () => {
       await insertUsers([admin]);
       newUser.role = 'invalid';
 
@@ -210,7 +210,7 @@ describe('User routes', () => {
       const res = await request(app)
         .get('/v1/users')
         .set('Authorization', `Bearer ${adminAccessToken}`)
-        .query({ role: 'user' })
+        .query({ role: 'employee' })
         .send()
         .expect(httpStatus.OK);
 
@@ -418,17 +418,79 @@ describe('User routes', () => {
   });
 
   describe('DELETE /v1/users/:userId', () => {
-    test('should return 204 if data is ok', async () => {
+    test('should return 200 and soft delete user if data is ok', async () => {
       await insertUsers([userOne]);
 
-      await request(app)
+      const res = await request(app)
         .delete(`/v1/users/${userOne._id}`)
         .set('Authorization', `Bearer ${userOneAccessToken}`)
         .send()
-        .expect(httpStatus.NO_CONTENT);
+        .expect(httpStatus.OK);
+
+      expect(res.body).toEqual({ message: 'Employee deleted successfully' });
+
+      // User document should still exist in database
+      const dbUser = await User.findById(userOne._id);
+      expect(dbUser).toBeDefined();
+      expect(dbUser.isDeleted).toBe(true);
+      expect(dbUser.deletedAt).toBeDefined();
+      expect(dbUser.deletedAt).toBeInstanceOf(Date);
+      expect(dbUser.deletedBy).toBeDefined();
+    });
+
+    test('should set deletedBy to the authenticated user who performed deletion', async () => {
+      await insertUsers([userOne, admin]);
+
+      await request(app)
+        .delete(`/v1/users/${userOne._id}`)
+        .set('Authorization', `Bearer ${adminAccessToken}`)
+        .send()
+        .expect(httpStatus.OK);
 
       const dbUser = await User.findById(userOne._id);
-      expect(dbUser).toBeNull();
+      expect(dbUser.deletedBy.toString()).toBe(admin._id.toHexString());
+    });
+
+    test('should return 400 error if user is already deleted', async () => {
+      await insertUsers([userOne, admin]);
+
+      // Delete the user first time
+      await request(app)
+        .delete(`/v1/users/${userOne._id}`)
+        .set('Authorization', `Bearer ${adminAccessToken}`)
+        .send()
+        .expect(httpStatus.OK);
+
+      // Try to delete again
+      await request(app)
+        .delete(`/v1/users/${userOne._id}`)
+        .set('Authorization', `Bearer ${adminAccessToken}`)
+        .send()
+        .expect(httpStatus.BAD_REQUEST);
+    });
+
+    test('should exclude soft-deleted users from GET /v1/users listing', async () => {
+      await insertUsers([userOne, userTwo, admin]);
+
+      // Delete userOne
+      await request(app)
+        .delete(`/v1/users/${userOne._id}`)
+        .set('Authorization', `Bearer ${adminAccessToken}`)
+        .send()
+        .expect(httpStatus.OK);
+
+      // Get all users - should not include deleted user
+      const res = await request(app)
+        .get('/v1/users')
+        .set('Authorization', `Bearer ${adminAccessToken}`)
+        .send()
+        .expect(httpStatus.OK);
+
+      expect(res.body.totalResults).toBe(2); // Only userTwo and admin
+      const userIds = res.body.results.map(u => u.id);
+      expect(userIds).not.toContain(userOne._id.toHexString());
+      expect(userIds).toContain(userTwo._id.toHexString());
+      expect(userIds).toContain(admin._id.toHexString());
     });
 
     test('should return 401 error if access token is missing', async () => {
@@ -447,14 +509,14 @@ describe('User routes', () => {
         .expect(httpStatus.FORBIDDEN);
     });
 
-    test('should return 204 if admin is trying to delete another user', async () => {
+    test('should return 200 if admin is trying to delete another user', async () => {
       await insertUsers([userOne, admin]);
 
       await request(app)
         .delete(`/v1/users/${userOne._id}`)
         .set('Authorization', `Bearer ${adminAccessToken}`)
         .send()
-        .expect(httpStatus.NO_CONTENT);
+        .expect(httpStatus.OK);
     });
 
     test('should return 400 error if userId is not a valid mongo id', async () => {
@@ -498,14 +560,14 @@ describe('User routes', () => {
         id: userOne._id.toHexString(),
         name: updateBody.name,
         email: updateBody.email,
-        role: 'user',
+        role: 'employee',
         isEmailVerified: false,
       });
 
       const dbUser = await User.findById(userOne._id);
       expect(dbUser).toBeDefined();
       expect(dbUser.password).not.toBe(updateBody.password);
-      expect(dbUser).toMatchObject({ name: updateBody.name, email: updateBody.email, role: 'user' });
+      expect(dbUser).toMatchObject({ name: updateBody.name, email: updateBody.email, role: 'employee' });
     });
 
     test('should return 401 error if access token is missing', async () => {
@@ -620,6 +682,108 @@ describe('User routes', () => {
         .set('Authorization', `Bearer ${userOneAccessToken}`)
         .send(updateBody)
         .expect(httpStatus.BAD_REQUEST);
+    });
+  });
+
+  describe('Soft Delete Integration Tests', () => {
+    describe('GET /v1/users/count', () => {
+      test('should exclude soft-deleted users from count', async () => {
+        // Create test users with role 'employee'
+        const employee1 = {
+          ...userOne,
+          role: 'employee',
+          isActive: 'Active',
+          workInformation: { joinedDate: new Date() }
+        };
+        const employee2 = {
+          ...userTwo,
+          role: 'employee',
+          isActive: 'Active',
+          workInformation: { joinedDate: new Date() }
+        };
+
+        await User.insertMany([employee1, employee2, admin]);
+
+        // Get initial count
+        let res = await request(app)
+          .get('/v1/users/count?role=employee')
+          .set('Authorization', `Bearer ${adminAccessToken}`)
+          .send()
+          .expect(httpStatus.OK);
+
+        expect(res.body.total).toBe(2);
+        expect(res.body.active).toBe(2);
+
+        // Soft delete one employee
+        await request(app)
+          .delete(`/v1/users/${employee1._id}`)
+          .set('Authorization', `Bearer ${adminAccessToken}`)
+          .send()
+          .expect(httpStatus.OK);
+
+        // Get count again - should exclude deleted user
+        res = await request(app)
+          .get('/v1/users/count?role=employee')
+          .set('Authorization', `Bearer ${adminAccessToken}`)
+          .send()
+          .expect(httpStatus.OK);
+
+        expect(res.body.total).toBe(1);
+        expect(res.body.active).toBe(1);
+      });
+    });
+
+    describe('GET /v1/users/dropdown', () => {
+      test('should exclude soft-deleted users from dropdown', async () => {
+        await insertUsers([userOne, userTwo, admin]);
+
+        // Get initial dropdown
+        let res = await request(app)
+          .get('/v1/users/dropdown?role=employee')
+          .set('Authorization', `Bearer ${adminAccessToken}`)
+          .send()
+          .expect(httpStatus.OK);
+
+        expect(res.body).toHaveLength(2);
+
+        // Soft delete one user
+        await request(app)
+          .delete(`/v1/users/${userOne._id}`)
+          .set('Authorization', `Bearer ${adminAccessToken}`)
+          .send()
+          .expect(httpStatus.OK);
+
+        // Get dropdown again - should exclude deleted user
+        res = await request(app)
+          .get('/v1/users/dropdown?role=employee')
+          .set('Authorization', `Bearer ${adminAccessToken}`)
+          .send()
+          .expect(httpStatus.OK);
+
+        expect(res.body).toHaveLength(1);
+        expect(res.body[0].id).toBe(userTwo._id.toHexString());
+      });
+    });
+
+    describe('Historical data preservation', () => {
+      test('should preserve user document for historical references after soft delete', async () => {
+        await insertUsers([userOne]);
+
+        // Soft delete the user
+        await request(app)
+          .delete(`/v1/users/${userOne._id}`)
+          .set('Authorization', `Bearer ${userOneAccessToken}`)
+          .send()
+          .expect(httpStatus.OK);
+
+        // User should still be accessible by ID for historical data
+        const dbUser = await User.findById(userOne._id);
+        expect(dbUser).toBeDefined();
+        expect(dbUser.name).toBe(userOne.name);
+        expect(dbUser.email).toBe(userOne.email);
+        expect(dbUser.role).toBe(userOne.role);
+        expect(dbUser.isDeleted).toBe(true);
+      });
     });
   });
 });

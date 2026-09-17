@@ -39,6 +39,11 @@ const generateBranchId = catchAsync(async (req, res) => {
   res.send({ branchNumber });
 });
 
+const getBranchDropdown = catchAsync(async (req, res) => {
+  const branches = await branchService.getBranchDropdown();
+  res.send(branches);
+});
+
 module.exports = {
   createBranch,
   getBranches,
@@ -46,4 +51,5 @@ module.exports = {
   updateBranch,
   deleteBranch,
   generateBranchId,
+  getBranchDropdown,
 };

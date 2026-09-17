@@ -75,6 +75,7 @@ const queryTeams = async (filter, options) => {
     {
       $match: {
         'workInformation.team': { $in: teamIds },
+        isDeleted: { $ne: true }, // Exclude soft-deleted users
       },
     },
     {
@@ -108,7 +109,10 @@ const getTeamById = async (id) => {
     .populate('teamLead', 'name');
   if (!team) return null;
   const t = team.toJSON();
-  const memberCount = await User.countDocuments({ 'workInformation.team': team._id });
+  const memberCount = await User.countDocuments({ 
+    'workInformation.team': team._id,
+    isDeleted: { $ne: true } // Exclude soft-deleted users
+  });
   t.totalUsers = memberCount || (Array.isArray(t.teamEmployees) ? t.teamEmployees.length : 0);
   return t;
 };

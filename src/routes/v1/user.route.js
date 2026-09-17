@@ -26,6 +26,13 @@ router
   .route('/generate-agentId')
   .get(userController.generateAgentId);
 
+// GET /v1/users/dropdown
+// Dropdown API for agents, staff, and employees
+// Query params: ?role=agent,staff,employee&search=john
+router
+  .route('/dropdown')
+  .get(validate(userValidation.getUsersDropdown), userController.getUsersDropdown);
+
 router
   .route('/employee/:employeeId')
   .get(validate(userValidation.getEmployeeByEmpId), userController.getEmployeeByEmpId);
@@ -57,17 +64,26 @@ router
   )
   .delete(userController.deleteUser);
 
-// ── Document upload ───────────────────────────────────────────────────────────
+// ── Document upload/link ──────────────────────────────────────────────────────
 // POST /v1/users/:userId/documents
-// Content-Type: multipart/form-data
-// Field name  : any (accepts any field name the frontend uses)
-// Query param : ?documentType=government | personal  (default: personal)
+// Supports two modes:
+// 1. multipart/form-data: Direct file upload (uses cloudinaryUpload middleware)
+// 2. application/json: Pre-uploaded URLs from /v1/media/upload
+//    Body: { documents: [{ fileUrl, documentName, fileName, mimeType, publicId }] }
+//    or  : { documentImage: [...] }
+// Query param: ?documentType=government | personal (default: personal)
 router
   .route('/:userId/documents')
-  .post(
-    cloudinaryUpload('hrms/user-documents', 'any', 10),
-    userController.uploadUserDocuments
-  );
+  .post(userController.uploadUserDocuments);
+
+// DELETE /v1/users/:userId/documents/:documentId
+// Deletes a specific user document
+// PATCH /v1/users/:userId/documents/:documentId
+// Updates a specific user document's metadata
+router
+  .route('/:userId/documents/:documentId')
+  .patch(userController.updateUserDocument)
+  .delete(userController.deleteUserDocument);
 
 module.exports = router;
 

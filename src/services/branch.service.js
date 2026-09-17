@@ -155,6 +155,15 @@ const generateUniqueBranchId = async () => {
   return branchNumber;
 };
 
+/**
+ * Get a lightweight list of active branches for dropdown use.
+ * Returns only _id and branchName.
+ * @returns {Promise<Array<{_id: ObjectId, branchName: string}>>}
+ */
+const getBranchDropdown = async () => {
+  return Branch.find({ branchStatus: 'active' }, { _id: 1, branchName: 1 }).lean();
+};
+
 module.exports = {
   createBranch,
   queryBranches,
@@ -162,4 +171,5 @@ module.exports = {
   updateBranchById,
   deleteBranchById,
   generateUniqueBranchId,
+  getBranchDropdown,
 };

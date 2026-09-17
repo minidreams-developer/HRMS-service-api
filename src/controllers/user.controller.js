@@ -10,6 +10,7 @@ const registerEmployee = catchAsync(async (req, res) => {
   console.log('[registerEmployee] emergencyContacts:', req.body.emergencyContacts);
   console.log('[registerEmployee] bankDetails:', req.body.bankDetails);
   console.log('[registerEmployee] salaryDetails:', req.body.salaryDetails);
+  console.log('[registerEmployee] created user:',req.bodycommissionDetails || null);
   const user = await userService.registerEmployee(req.body);
   console.log('[registerEmployee] created user:', user._id, user.employeeId);
   res.status(httpStatus.CREATED).send(user);
@@ -163,7 +164,7 @@ const updateUser = catchAsync(async (req, res) => {
   // If files were uploaded alongside the PATCH, save them as user documents
   if (req.files && req.files.length > 0) {
     const documentType = req.query.documentType || req.body.documentType || 'personal';
-    await userService.uploadUserDocuments(req.params.userId, req.files, documentType);
+    await userService.uploadUserDocuments(req.params.userId, req.files, documentType, null);
   }
 
   const user = await userService.updateUserById(req.params.userId, req.body);
@@ -172,8 +173,10 @@ const updateUser = catchAsync(async (req, res) => {
 });
 
 const deleteUser = catchAsync(async (req, res) => {
-  await userService.deleteUserById(req.params.userId);
-  res.status(httpStatus.NO_CONTENT).send();
+  // Pass the authenticated user's ID for deletedBy tracking
+  const deletedByUserId = req.user?._id || req.user?.id || null;
+  await userService.deleteUserById(req.params.userId, deletedByUserId);
+  res.status(httpStatus.OK).send({ message: 'Employee deleted successfully' });
 });
 
 const getEmployeeCount = catchAsync(async (req, res) => {
@@ -198,18 +201,35 @@ const generateAgentId = catchAsync(async (req, res) => {
 
 /**
  * POST /v1/users/:userId/documents
- * Accepts multipart/form-data with a 'documents' field.
+ * Accepts either:
+ * 1. multipart/form-data with file uploads (req.files) - NOT RECOMMENDED, use /v1/media/upload instead
+ * 2. application/json with pre-uploaded document URLs (RECOMMENDED)
+ *    Body format:
+ *    {
+ *      "documentType": "personal" | "government",  // optional, defaults to "personal"
+ *      "documents": [
+ *        {
+ *          "fileUrl": "https://res.cloudinary.com/...",  // REQUIRED - from /v1/media/upload response (url field)
+ *          "documentName": "Passport",                   // optional - human-readable name
+ *          "fileName": "passport.pdf",                    // optional - original file name
+ *          "mimeType": "application/pdf",                // optional - from /v1/media/upload
+ *          "publicId": "hrms/media/doc_abc123"           // optional - from /v1/media/upload
+ *        }
+ *      ]
+ *    }
+ * 
  * Query param: ?documentType=government | personal (default: personal)
  */
 const uploadUserDocuments = catchAsync(async (req, res) => {
   console.log('[uploadUserDocuments] userId:', req.params.userId);
-  console.log('[uploadUserDocuments] files:', req.files?.map(f => f.originalname));
-  console.log('[uploadUserDocuments] documentType:', req.query.documentType);
+  console.log('[uploadUserDocuments] files:', req.files?.length || 0);
+  console.log('[uploadUserDocuments] body:', JSON.stringify(req.body, null, 2));
 
   const user = await userService.uploadUserDocuments(
     req.params.userId,
     req.files,
-    req.query.documentType || 'personal'
+    req.query.documentType || req.body.documentType || 'personal',
+    req.body.documents || req.body.documentImage
   );
   res.send(user);
 });
@@ -235,6 +255,62 @@ const getAgentMembers = catchAsync(async (req, res) => {
   res.send(result);
 });
 
+/**
+ * GET /v1/users/dropdown
+ * Returns users for dropdown, filtered by role (agent, staff, employee)
+ * Query params:
+ *   - role: single role or comma-separated roles (e.g., ?role=agent or ?role=agent,staff,employee)
+ *   - search: search term for name, email, or employeeId
+ * Returns minimal data: { _id, name, employeeId, role, email, profilePic }
+ */
+const getUsersDropdown = catchAsync(async (req, res) => {
+  const filters = {};
+  
+  // Handle role filter - support comma-separated values
+  if (req.query.role) {
+    const roles = req.query.role.split(',').map(r => r.trim());
+    filters.role = roles.length === 1 ? roles[0] : roles;
+  }
+  
+  // Handle search filter
+  if (req.query.search) {
+    filters.search = req.query.search;
+  }
+  
+  const users = await userService.getUsersDropdown(filters);
+  res.send(users);
+});
+
+/**
+ * PATCH /v1/users/:userId/documents/:documentId
+ * Updates a specific user document's metadata
+ * Body: { documentName, documentType, fileUrl, fileName, mimeType, publicId }
+ */
+const updateUserDocument = catchAsync(async (req, res) => {
+  console.log('[updateUserDocument] userId:', req.params.userId);
+  console.log('[updateUserDocument] documentId:', req.params.documentId);
+  console.log('[updateUserDocument] body:', req.body);
+
+  const document = await userService.updateUserDocument(
+    req.params.userId,
+    req.params.documentId,
+    req.body
+  );
+  res.send(document);
+});
+
+/**
+ * DELETE /v1/users/:userId/documents/:documentId
+ * Deletes a specific user document
+ */
+const deleteUserDocument = catchAsync(async (req, res) => {
+  console.log('[deleteUserDocument] userId:', req.params.userId);
+  console.log('[deleteUserDocument] documentId:', req.params.documentId);
+
+  await userService.deleteUserDocument(req.params.userId, req.params.documentId);
+  res.status(httpStatus.NO_CONTENT).send();
+});
+
 module.exports = {
   registerEmployee,
   createUser,
@@ -247,6 +323,9 @@ module.exports = {
   generateStaffId,
   generateAgentId,
   uploadUserDocuments,
+  updateUserDocument,
+  deleteUserDocument,
   getEmployeeByEmpId,
   getAgentMembers,
+  getUsersDropdown,
 };

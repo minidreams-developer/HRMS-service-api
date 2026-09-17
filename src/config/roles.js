@@ -7,7 +7,6 @@ const allRoles = {
   manager:  ['getUsers'],
   subAdmin: ['getUsers', 'manageUsers'],
   admin:    ['getUsers', 'manageUsers'],
-  admin: ['getUsers', 'manageUsers'],
   contractor:[],
 };
 

@@ -51,7 +51,11 @@ const ddmm = (date) => {
  * works regardless of how the value was originally saved.
  */
 const buildUserFilterQuery = (filters = {}) => {
-  const query = { role: { $ne: 'admin' }, isActive: 'Active' };
+  const query = { 
+    role: { $ne: 'admin' }, 
+    isActive: 'Active',
+    isDeleted: { $ne: true } // Exclude soft-deleted users
+  };
 
   if (filters.branchId) {
     const id = mongoose.Types.ObjectId.isValid(filters.branchId)

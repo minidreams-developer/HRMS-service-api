@@ -1,5 +1,5 @@
 const httpStatus = require('http-status');
-const { User, Address, BankDetails, SalaryDetails } = require('../models');
+const { User, Address, BankDetails, SalaryDetails, Commission } = require('../models');
 const EmergencyContact = require('../models/emergencyContact.model');
 const UserDocument = require('../models/userDocuments.model');
 const ApiError = require('../utils/ApiError');
@@ -97,6 +97,23 @@ const registerEmployee = async (body) => {
     }
   }
 
+
+  let commissionDetails;
+
+  if(body.commissionDetails)
+  {
+    const data =  await Commission.create(body.commissionDetails);
+    commissionDetails = data._id;
+  }
+
+
+  // Transform spokenLanguages from [{value, label}] to string array
+  const spokenLanguages = Array.isArray(body.spokenLanguages)
+    ? body.spokenLanguages.map(lang => 
+        typeof lang === 'object' && lang.value ? lang.value : lang
+      )
+    : body.spokenLanguages || [];
+
   const userData = {
     name: body.name,
     email: body.email,
@@ -106,7 +123,7 @@ const registerEmployee = async (body) => {
     gender: body.gender,
     dateOfBirth: body.dateOfBirth,
     age: body.age,
-    spokenLanguages: body.spokenLanguages || [],
+    spokenLanguages,
     martialStatus: body.martialStatus,
     motherTongue: body.motherTongue,
     identificationMark: body.identificationMark,
@@ -141,6 +158,7 @@ const registerEmployee = async (body) => {
       location: body.workInformation?.location,
       reference: body.workInformation?.reference,
     },
+    commissionDetails:commissionDetails,
   };
 
   return User.create(userData).then(async (user) => {
@@ -219,6 +237,9 @@ const populateWorkInfo = async (docs) => {
 const queryUsers = async (filter, options, advancedFilters = {}) => {
   // ── Build the MongoDB filter ────────────────────────────────────────────
   const mongoFilter = {};
+
+  // Exclude soft-deleted users by default
+  mongoFilter.isDeleted = { $ne: true };
 
   // Free-text search across name, email, employeeId
   if (advancedFilters.search) {
@@ -343,6 +364,7 @@ const queryUsers = async (filter, options, advancedFilters = {}) => {
         $match: {
           role: { $in: ['employee', 'staff'] },
           'workInformation.contractAgent': { $in: agentIds },
+          isDeleted: { $ne: true }, // Exclude soft-deleted users
         },
       },
       {
@@ -379,7 +401,8 @@ const getUserById = async (id) => {
     .populate('emergencyContact')
     .populate('userDocuments')
     .populate('workInformation.SalaryDetails')
-    .populate('workInformation.bankDetails');
+    .populate('workInformation.bankDetails')
+    .populate('commissionDetails');
   if (user) await populateWorkInfo([user]);
   return user;
 };
@@ -582,16 +605,28 @@ const updateUserById = async (userId, updateBody) => {
 };
 
 /**
- * Delete user by id
+ * Delete user by id (soft delete)
  * @param {ObjectId} userId
+ * @param {ObjectId} deletedByUserId - The ID of the user performing the deletion
  * @returns {Promise<User>}
  */
-const deleteUserById = async (userId) => {
+const deleteUserById = async (userId, deletedByUserId) => {
   const user = await getUserById(userId);
   if (!user) {
     throw new ApiError(httpStatus.NOT_FOUND, 'User not found');
   }
-  await user.remove();
+
+  // Check if already deleted
+  if (user.isDeleted) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'User is already deleted');
+  }
+
+  // Soft delete: mark as deleted instead of removing from database
+  user.isDeleted = true;
+  user.deletedAt = new Date();
+  user.deletedBy = deletedByUserId || null;
+  await user.save();
+
   return user;
 };
 
@@ -659,17 +694,7 @@ const generateStaffId = async () => {
  * @returns {Promise<string>}
  */
 const generateAgentId = async () => {
-  const pending = getPending(AGENT_ID_KEY);
-
-  if (pending) {
-    const savedInDb = await User.exists({ employeeId: pending });
-    if (savedInDb) {
-      clearPending(AGENT_ID_KEY);
-    } else {
-      return pending;
-    }
-  }
-
+  // Generate a fresh unique ID on every call without caching
   let agentId;
   let exists = true;
   while (exists) {
@@ -678,7 +703,6 @@ const generateAgentId = async () => {
     exists = await User.exists({ employeeId: agentId });
   }
 
-  setPending(AGENT_ID_KEY, agentId);
   return agentId;
 };
 
@@ -727,6 +751,50 @@ const getDistinctroles = async() =>
   return designation;
 }
 
+/**
+ * Get users for dropdown filtered by role (agent, staff, employee).
+ * Returns minimal data: _id, name, employeeId, role, email
+ * Supports filters: role (single or array), search
+ * @param {Object} filters - { role, search }
+ * @returns {Promise<Array>}
+ */
+const getUsersDropdown = async (filters = {}) => {
+  const query = {};
+
+  // Exclude soft-deleted users
+  query.isDeleted = { $ne: true };
+
+  // Role filter - supports single role or multiple roles
+  if (filters.role) {
+    const roleArray = Array.isArray(filters.role) ? filters.role : [filters.role];
+    // Validate roles
+    const validRoles = ['agent', 'staff', 'employee'];
+    const filteredRoles = roleArray.filter(r => validRoles.includes(r));
+    
+    if (filteredRoles.length > 0) {
+      query.role = filteredRoles.length === 1 ? filteredRoles[0] : { $in: filteredRoles };
+    }
+  }
+
+  // Search filter - searches name, email, and employeeId
+  if (filters.search) {
+    const regex = { $regex: filters.search, $options: 'i' };
+    query.$or = [
+      { name: regex },
+      { email: regex },
+      { employeeId: regex },
+    ];
+  }
+
+  // Fetch users with minimal fields for dropdown
+  const users = await User.find(query)
+    .select('_id name employeeId role email profilePic')
+    .sort({ name: 1 })
+    .lean();
+
+  return users;
+}
+
 // const getDistinctStatus = async()=>
 // {
 //   const status = mongoose.model('User') 
@@ -734,39 +802,89 @@ const getDistinctroles = async() =>
 
 /**
  * Upload documents for a user.
- * Creates a UserDocument record for each uploaded file and links them to the user.
+ * Supports two modes:
+ * 1. File upload: Creates UserDocument records from uploaded files (multer) - NOT RECOMMENDED
+ * 2. Pre-uploaded URLs: Creates UserDocument records from pre-uploaded Cloudinary URLs (RECOMMENDED)
+ *    Frontend should:
+ *    a) Upload files to /v1/media/upload first
+ *    b) Get back { files: [{ url, originalName, publicId, mimeType, ... }] }
+ *    c) Send those URLs to this endpoint as { documents: [{ fileUrl, documentName, ... }] }
  *
  * @param {ObjectId} userId
- * @param {Array}    files        - multer file objects (from req.files)
- * @param {string}   documentType - 'government' | 'personal'
+ * @param {Array}    files          - multer file objects (from req.files) - optional
+ * @param {string}   documentType   - 'government' | 'personal'
+ * @param {Array}    preUploadedDocs - pre-uploaded document objects with fileUrl, documentName, etc. - optional
  * @returns {Promise<User>}
  */
-const uploadUserDocuments = async (userId, files, documentType = 'personal') => {
+const uploadUserDocuments = async (userId, files, documentType = 'personal', preUploadedDocs = null) => {
   const user = await getUserById(userId);
   if (!user) {
     throw new ApiError(httpStatus.NOT_FOUND, 'User not found');
   }
 
-  if (!files || files.length === 0) {
-    throw new ApiError(httpStatus.BAD_REQUEST, 'No files uploaded');
+  // Check if we have either files or pre-uploaded documents
+  const hasFiles = files && files.length > 0;
+  const hasPreUploadedDocs = preUploadedDocs && preUploadedDocs.length > 0;
+
+  if (!hasFiles && !hasPreUploadedDocs) {
+    throw new ApiError(
+      httpStatus.BAD_REQUEST, 
+      'No documents provided. Send either files via multipart/form-data or pre-uploaded URLs in JSON body. ' +
+      'Recommended: upload to /v1/media/upload first, then send URLs here.'
+    );
   }
 
-  // Create a UserDocument record for each uploaded file
   const docIds = [];
-  for (const file of files) {
-    const doc = await UserDocument.create({
-      userId,
-      documentName: file.originalname,
-      documentType,
-      fileUrl: file.path, // Cloudinary returns the secure URL in file.path
-    });
-    docIds.push(doc._id);
+
+  // Handle file uploads (multipart/form-data) - NOT RECOMMENDED
+  if (hasFiles) {
+    for (const file of files) {
+      const doc = await UserDocument.create({
+        userId,
+        documentName: file.originalname,
+        documentType,
+        fileUrl: file.path, // Cloudinary returns the secure URL in file.path
+        fileName: file.originalname,
+        mimeType: file.mimetype,
+        publicId: file.filename, // Cloudinary public_id
+      });
+      docIds.push(doc._id);
+    }
+  }
+
+  // Handle pre-uploaded documents (JSON payload) - RECOMMENDED
+  if (hasPreUploadedDocs) {
+    for (const doc of preUploadedDocs) {
+      // Skip invalid entries
+      if (!doc) continue;
+      
+      // fileUrl is required (can be 'url' from /v1/media/upload or 'fileUrl')
+      const fileUrl = doc.fileUrl || doc.url;
+      if (!fileUrl) {
+        console.warn('[uploadUserDocuments] Skipping document without fileUrl:', doc);
+        continue;
+      }
+
+      const created = await UserDocument.create({
+        userId,
+        documentName: doc.documentName || doc.originalName || doc.fileName || 'Unnamed Document',
+        documentType: doc.documentType || documentType,
+        fileUrl,
+        fileName: doc.fileName || doc.originalName,
+        publicId: doc.publicId,
+        mimeType: doc.mimeType,
+        keepOriginal: doc.keepOriginal || false,
+      });
+      docIds.push(created._id);
+    }
   }
 
   // Link the new document IDs to the user
-  await User.findByIdAndUpdate(userId, {
-    $push: { userDocuments: { $each: docIds } },
-  });
+  if (docIds.length > 0) {
+    await User.findByIdAndUpdate(userId, {
+      $push: { userDocuments: { $each: docIds } },
+    });
+  }
 
   return getUserById(userId);
 };
@@ -779,6 +897,9 @@ const uploadUserDocuments = async (userId, files, documentType = 'personal') => 
  */
 const getEmployeeCount = async (filters = {}) => {
   const baseQuery = {};
+
+  // Exclude soft-deleted users
+  baseQuery.isDeleted = { $ne: true };
 
   // Role filter — defaults to 'employee' if not provided
   baseQuery.role = filters.role || 'employee';
@@ -799,7 +920,7 @@ const getEmployeeCount = async (filters = {}) => {
   const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
   const monthEnd   = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0, 23, 59, 59, 999));
 
-  const [total, active, inactive, relieved, newThisMonth] = await Promise.all([
+  const [total, active, inactive, relieved, newEmployees] = await Promise.all([
     User.countDocuments({ ...baseQuery }),
     User.countDocuments({ ...baseQuery, isActive: 'Active' }),
     User.countDocuments({ ...baseQuery, isActive: 'In-Active' }),
@@ -816,8 +937,72 @@ const getEmployeeCount = async (filters = {}) => {
     active,
     inactive,
     relieved,
-    newThisMonth,
+    newEmployees,
   };
+};
+
+/**
+ * Update a user document by userId and documentId.
+ * Updates document metadata (documentName, documentType, etc.)
+ *
+ * @param {ObjectId} userId
+ * @param {ObjectId} documentId
+ * @param {Object} updateBody - { documentName, documentType, fileUrl, fileName, mimeType, publicId }
+ * @returns {Promise<UserDocument>}
+ */
+const updateUserDocument = async (userId, documentId, updateBody) => {
+  const user = await getUserById(userId);
+  if (!user) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'User not found');
+  }
+
+  const document = await UserDocument.findOne({ _id: documentId, userId });
+  if (!document) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'Document not found');
+  }
+
+  // Update allowed fields
+  const allowedUpdates = ['documentName', 'documentType', 'fileUrl', 'fileName', 'mimeType', 'publicId', 'keepOriginal'];
+  const updates = {};
+  
+  allowedUpdates.forEach((field) => {
+    if (updateBody[field] !== undefined) {
+      updates[field] = updateBody[field];
+    }
+  });
+
+  Object.assign(document, updates);
+  await document.save();
+
+  return document;
+};
+
+/**
+ * Delete a user document by userId and documentId.
+ * Removes the document from the UserDocument collection and the user's userDocuments array.
+ *
+ * @param {ObjectId} userId
+ * @param {ObjectId} documentId
+ * @returns {Promise<void>}
+ */
+const deleteUserDocument = async (userId, documentId) => {
+  const user = await getUserById(userId);
+  if (!user) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'User not found');
+  }
+
+  const document = await UserDocument.findOne({ _id: documentId, userId });
+  if (!document) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'Document not found');
+  }
+
+  // Remove the document from UserDocument collection
+  await UserDocument.findByIdAndDelete(documentId);
+
+  // Remove the document reference from the user's userDocuments array
+  await User.findByIdAndUpdate(userId, {
+    $pull: { userDocuments: documentId },
+  });
 };
 
 /**
@@ -843,6 +1028,7 @@ const getAgentMembers = async (agentId, options = {}, filters = {}) => {
       ? filters.role
       : { $in: ['employee', 'staff'] },
     'workInformation.contractAgent': contractAgentMatch,
+    isDeleted: { $ne: true }, // Exclude soft-deleted users
   };
 
   // ── Summary counts always use the base filter (no status/date applied) ──
@@ -924,8 +1110,11 @@ module.exports = {
   generateStaffId,
   generateAgentId,
   uploadUserDocuments,
+  updateUserDocument,
+  deleteUserDocument,
   getEmployeeCount,
   getDistinctDepartments,
   getDistinctroles,
   getAgentMembers,
+  getUsersDropdown,
 };

@@ -99,6 +99,13 @@ const userSchema = mongoose.Schema(
       aadharNo: {
         type: Number
       },
+      aadharFile:
+      {
+        type:String
+      },
+      panFile: {
+        type: String
+      },
       panNo: {
         type: String
       },
@@ -147,7 +154,7 @@ const userSchema = mongoose.Schema(
       specialty: { type: String, trim: true },
       LicenseNo: { type: String, trim: true },
       dateOfJoining: { type: Date },
-      jobItems: { type: mongoose.Schema.Types.ObjectId, ref: "Contractor" },
+      jobItems: [{ type: mongoose.Schema.Types.ObjectId, ref: "Contractor" }],
       // Work experience fields
       workExperience: { type: String },
       totalExperience: { type: String },
@@ -194,6 +201,21 @@ const userSchema = mongoose.Schema(
       type: String,
       enum: Status,
       default: "Active",
+    },
+
+    // Soft delete fields
+    isDeleted: {
+      type: Boolean,
+      default: false,
+    },
+    deletedAt: {
+      type: Date,
+      default: null,
+    },
+    deletedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
     },
   },
   {

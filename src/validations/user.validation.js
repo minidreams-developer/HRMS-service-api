@@ -1,6 +1,23 @@
 const Joi = require('joi');
 const { password, objectId } = require('./custom.validation');
 
+// Custom validation for status - accepts case-insensitive and normalizes to proper case
+const statusValidator = (value, helpers) => {
+  const normalizedValue = value.toLowerCase();
+  const statusMap = {
+    'active': 'Active',
+    'in-active': 'In-Active',
+    'inactive': 'In-Active',
+    'relieved': 'Relieved'
+  };
+  
+  if (statusMap[normalizedValue]) {
+    return statusMap[normalizedValue];
+  }
+  
+  return helpers.error('any.only');
+};
+
 // Roles must stay in sync with src/config/roles.js
 const ROLES = ['employee', 'hr_manager', 'team_lead', 'agent', 'staff', 'manager', 'subAdmin', 'admin', 'contractor'];
 
@@ -41,7 +58,8 @@ const getUsers = {
     contractAgent: Joi.string().optional(),
 
     // ── Status filter — Active | In-Active | Relieved ────────────────────────
-    status:       Joi.string().valid('Active', 'In-Active', 'Relieved').optional(),
+    // Accepts case-insensitive input and normalizes to proper case
+    status:       Joi.string().custom(statusValidator).optional(),
 
     // ── Joined-date range ────────────────────────────────────────────────────
     joinedFrom:   Joi.date().iso().optional(),
@@ -94,6 +112,15 @@ const getEmployeeByEmpId = {
   }),
 };
 
+const getUsersDropdown = {
+  query: Joi.object().keys({
+    // Role filter - can be single value or comma-separated
+    role: Joi.string().optional(),
+    // Search term
+    search: Joi.string().optional(),
+  }),
+};
+
 const deleteUser = {
   params: Joi.object().keys({
     userId: Joi.string().custom(objectId),
@@ -106,6 +133,7 @@ module.exports = {
   getUsers,
   getUser,
   getEmployeeByEmpId,
+  getUsersDropdown,
   updateUser,
   deleteUser,
 };
