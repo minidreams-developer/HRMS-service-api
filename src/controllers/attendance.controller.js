@@ -3,6 +3,12 @@ const pick = require('../utils/pick');
 const ApiError = require('../utils/ApiError');
 const catchAsync = require('../utils/catchAsync');
 const { attendanceService } = require('../services');
+const { roleRights } = require('../config/roles');
+
+const canReadEmployeeAttendance = (req) => {
+  const rights = roleRights.get(req.user.role) || [];
+  return rights.includes('getUsers') || String(req.user._id || req.user.id) === String(req.params.employeeId);
+};
 
 const createAttendance = catchAsync(async (req, res) => {
   const attendance = await attendanceService.createAttendance(req.body);
@@ -10,7 +16,7 @@ const createAttendance = catchAsync(async (req, res) => {
 });
 
 const getAttendances = catchAsync(async (req, res) => {
-  const filter  = pick(req.query, ['search', 'employeeId', 'shiftId', 'date', 'attendanceStatus', 'fromDate', 'toDate']);
+  const filter  = pick(req.query, ['search', 'employeeId', 'shiftId', 'date', 'attendanceStatus', 'timingStatus', 'attendanceCategory', 'fromDate', 'toDate']);
   const options = pick(req.query, ['sortBy', 'limit', 'page']);
   const result  = await attendanceService.queryAttendances(filter, options);
   res.send(result);
@@ -24,8 +30,30 @@ const getAttendance = catchAsync(async (req, res) => {
   res.send(attendance);
 });
 
+const getEmployeeAttendanceSummary = catchAsync(async (req, res) => {
+  if (!canReadEmployeeAttendance(req)) throw new ApiError(httpStatus.FORBIDDEN, 'Forbidden');
+  const summary = await attendanceService.getEmployeeAttendanceSummary(
+    req.params.employeeId,
+    req.query.fromDate,
+    req.query.toDate,
+  );
+  res.send(summary);
+});
+
+const getEmployeeAttendance = catchAsync(async (req, res) => {
+  if (!canReadEmployeeAttendance(req)) throw new ApiError(httpStatus.FORBIDDEN, 'Forbidden');
+  const filter = pick(req.query, ['date', 'fromDate', 'toDate', 'attendanceCategory', 'timingStatus']);
+  const options = pick(req.query, ['sortBy', 'limit', 'page']);
+  res.send(await attendanceService.getEmployeeAttendance(req.params.employeeId, filter, options));
+});
+
+const getEmployeeCalendar = catchAsync(async (req, res) => {
+  if (!canReadEmployeeAttendance(req)) throw new ApiError(httpStatus.FORBIDDEN, 'Forbidden');
+  res.send(await attendanceService.getEmployeeCalendar(req.params.employeeId, req.query.fromDate, req.query.toDate));
+});
+
 const updateAttendance = catchAsync(async (req, res) => {
-  const attendance = await attendanceService.updateAttendanceById(req.params.attendanceId, req.body);
+  const attendance = await attendanceService.updateAttendanceById(req.params.attendanceId, req.body, req.user._id || req.user.id);
   res.send(attendance);
 });
 
@@ -38,6 +66,9 @@ module.exports = {
   createAttendance,
   getAttendances,
   getAttendance,
+  getEmployeeAttendanceSummary,
+  getEmployeeAttendance,
+  getEmployeeCalendar,
   updateAttendance,
   deleteAttendance,
 };

@@ -13,6 +13,7 @@ const buildFilePayload = (file) => ({
   url: file.path,           // Cloudinary secure URL
   publicId: file.filename,  // Cloudinary public_id (used for deletion)
   mimeType: file.mimetype,
+  resourceType: file.resource_type || (file.mimetype === 'application/pdf' || file.mimetype?.includes('word') ? 'raw' : 'image'),
   size: file.size,          // bytes
   folder: file.path.split('/upload/')[1]?.split('/')[1] ?? null,
 });
@@ -33,7 +34,8 @@ const processUploadedFiles = (files = []) => files.map(buildFilePayload);
  * @returns {Promise<Object>} Cloudinary deletion result
  */
 const deleteFile = async (publicId) => {
-  const result = await cloudinary.uploader.destroy(publicId, { invalidate: true });
+  const resourceType = publicId.endsWith('.pdf') ? 'raw' : 'image';
+  const result = await cloudinary.uploader.destroy(publicId, { invalidate: true, resource_type: resourceType });
   return result;
 };
 

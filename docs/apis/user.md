@@ -195,6 +195,16 @@ Creates a minimal user account (admin use).
     "SalaryDetails": "664f1b2c8e4a2b001c8dsd01",
     "designation": "Software Engineer"
   },
+  "attendanceDetails": [
+    {
+      "employeeId": "664f1b2c8e4a2b001c8d0001",
+      "date": "2024-06-03T00:00:00.000Z",
+      "loginTime": "2024-06-03T09:00:00.000Z",
+      "logoutTime": "2024-06-03T18:00:00.000Z",
+      "totalWorkedHours": 9,
+      "attendanceStatus": "onTime"
+    }
+  ],
   "approvalStatus": "pending",
   "isEmailVerified": false,
   "isProfileCompleted": false,

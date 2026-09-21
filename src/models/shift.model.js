@@ -92,6 +92,10 @@ const shiftSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    halfDayWorkingHours: {
+      type: String,
+      trim: true,
+    },
 
     // Advanced Timing Rules
     gracePeriod: {

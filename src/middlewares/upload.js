@@ -2,6 +2,7 @@ require('../config/config'); // ensure dotenv is loaded before reading process.e
 const cloudinary = require('cloudinary').v2;
 const { CloudinaryStorage } = require('multer-storage-cloudinary');
 const multer = require('multer');
+const path = require('path');
 
 // Configure cloudinary from env
 cloudinary.config({
@@ -19,10 +20,29 @@ cloudinary.config({
 const cloudinaryUpload = (folder = 'hrms', fieldName = 'documents', maxCount = 10) => {
   const storage = new CloudinaryStorage({
     cloudinary,
-    params: {
-      folder,
-      allowed_formats: ['jpg', 'jpeg', 'png', 'webp', 'gif', 'pdf', 'doc', 'docx'],
-      resource_type: 'auto', // required for non-image files like PDFs and docs
+    // Cloudinary's `auto` mode can place PDFs under image/upload. Explicitly
+    // use raw delivery for documents so the returned URL has the correct
+    // content type and can be opened/downloaded by browsers and PDF viewers.
+    params: (req, file) => {
+      const isRawDocument = file.mimetype === 'application/pdf' ||
+        file.mimetype === 'application/msword' ||
+        file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      const extension = path.extname(file.originalname).toLowerCase();
+      
+      // Generate a clean filename without extension for the public_id
+      const baseFilename = path.basename(file.originalname, extension);
+      const timestamp = Date.now();
+
+      return {
+        folder,
+        allowed_formats: ['jpg', 'jpeg', 'png', 'webp', 'gif', 'pdf', 'doc', 'docx'],
+        resource_type: isRawDocument ? 'raw' : 'image',
+        // For raw documents (PDFs, Word docs), we need to preserve the extension
+        // in the public_id so Cloudinary can serve it with the correct content-type
+        public_id: isRawDocument && extension 
+          ? `${baseFilename}-${timestamp}${extension}`
+          : `${baseFilename}-${timestamp}`,
+      };
     },
   });
 

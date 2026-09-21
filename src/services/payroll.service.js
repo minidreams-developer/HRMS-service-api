@@ -22,22 +22,6 @@ const getMonthRange = (month, year) => {
   return { start, end };
 };
 
-/**
- * Classify an attendance record as fullDay | halfDay | absent based on
- * totalWorkedHours relative to WORK_HOURS_PER_DAY.
- *   >= 75% of shift  → fullDay
- *   >= 25% of shift  → halfDay
- *   <  25%           → absent (off day)
- */
-const classifyAttendance = (totalWorkedHours) => {
-  const full = WORK_HOURS_PER_DAY;
-  const halfMark = full * 0.25;
-  const fullMark = full * 0.75;
-  if (totalWorkedHours >= fullMark) return 'fullDay';
-  if (totalWorkedHours >= halfMark) return 'halfDay';
-  return 'absent';
-};
-
 // ─────────────────────────────────────────────────────────────────────────────
 // CORE PAYROLL COMPUTATION (per employee, per month)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -59,11 +43,26 @@ const computePayrollForEmployee = async (employee, month, year, payrollOverride 
   let fullDays = 0;
   let halfDays = 0;
   let offDays = 0;
+  let legacyAttendanceRecords = 0;
+  const attendanceDateCounts = new Map();
 
   for (const rec of attendanceRecords) {
-    const classification = classifyAttendance(rec.totalWorkedHours || 0);
-    if (classification === 'fullDay') fullDays++;
-    else if (classification === 'halfDay') halfDays++;
+    const key = new Date(rec.date).toISOString().slice(0, 10);
+    attendanceDateCounts.set(key, (attendanceDateCounts.get(key) || 0) + 1);
+  }
+  const duplicateAttendanceDates = [...attendanceDateCounts.entries()]
+    .filter(([, count]) => count > 1)
+    .map(([date, count]) => ({ date, count }));
+
+  for (const rec of attendanceRecords) {
+    const key = new Date(rec.date).toISOString().slice(0, 10);
+    if (attendanceDateCounts.get(key) > 1) continue;
+    if (!['fullDay', 'halfDay', 'absent'].includes(rec.attendanceCategory)) {
+      legacyAttendanceRecords++;
+      continue;
+    }
+    if (rec.attendanceCategory === 'fullDay') fullDays++;
+    else if (rec.attendanceCategory === 'halfDay') halfDays++;
     else offDays++;
   }
 
@@ -167,6 +166,8 @@ const computePayrollForEmployee = async (employee, month, year, payrollOverride 
     fullDays,
     halfDays,
     offDays,
+    legacyAttendanceRecords,
+    duplicateAttendanceDates,
     paidLeaves,
     unpaidLeaves,
     dailyRate,
@@ -577,6 +578,7 @@ const getStoppedPayrolls = async (query, options) => {
 };
 
 module.exports = {
+  computePayrollForEmployee,
   getPayrollList,
   getEmployeePayroll,
   createPayroll,

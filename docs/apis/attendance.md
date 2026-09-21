@@ -202,3 +202,21 @@ No content.
 ### Pagination
 
 Supports `page`, `limit`, and `sortBy`. Default page size is `10`. Format: `sortBy=date:desc`.
+# Legacy `attendanceDay` migration
+
+Before production deployment, audit legacy Attendance records without `attendanceDay`:
+
+```bash
+NODE_ENV=test node scripts/auditAttendanceDay.js --dry-run
+```
+
+The script is dry-run by default and reports record counts, UTC-normalized duplicate employee/date groups, affected record details, and safe records eligible for backfill. It never selects a duplicate winner.
+
+Apply only safe, unique records explicitly:
+
+```bash
+NODE_ENV=production ALLOW_ATTENDANCE_MIGRATION_PRODUCTION=true \
+  node scripts/auditAttendanceDay.js --apply --confirm-production
+```
+
+Duplicate groups are skipped and must be reviewed manually using the reported employee ID, normalized date, record IDs, category, times, worked hours, and timestamps. No records are deleted, merged, or overwritten.

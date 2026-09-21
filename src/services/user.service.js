@@ -1,5 +1,5 @@
 const httpStatus = require('http-status');
-const { User, Address, BankDetails, SalaryDetails, Commission } = require('../models');
+const { User, Attendance, Address, BankDetails, SalaryDetails, Commission } = require('../models');
 const EmergencyContact = require('../models/emergencyContact.model');
 const UserDocument = require('../models/userDocuments.model');
 const ApiError = require('../utils/ApiError');
@@ -22,6 +22,14 @@ const toObjectId = (val) => {
 const EMP_ID_KEY  = 'employeeId';
 const STAFF_ID_KEY = 'staffId';
 const AGENT_ID_KEY = 'agentId';
+
+// Accept a plain URL, but also clean Markdown links accidentally sent by
+// clients: [https://example.com/file](https://example.com/file).
+const normalizeFileUrl = (value) => {
+  if (typeof value !== 'string') return value;
+  const markdownLink = value.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
+  return markdownLink ? markdownLink[2] : value.trim();
+};
 
 /**
  * Register a full employee with all related sub-documents
@@ -403,7 +411,22 @@ const getUserById = async (id) => {
     .populate('workInformation.SalaryDetails')
     .populate('workInformation.bankDetails')
     .populate('commissionDetails');
-  if (user) await populateWorkInfo([user]);
+  if (user) {
+    await populateWorkInfo([user]);
+
+    // Attendance records may be linked by either the user's MongoDB _id or
+    // legacy employee code (for example, EMP531374).
+    // Return the complete history for this user with the newest records first.
+    const attendanceDetails = await Attendance.find({
+      employeeId: { $in: [user._id, user.employeeId].filter(Boolean) },
+    })
+      .sort({ date: -1, createdAt: -1 })
+      .populate('employeeId', 'name employeeId email phone workInformation.designation')
+      .populate('shiftId', 'shiftName shiftCode shiftType timings');
+
+    // Add it to the serialized document without making it a persisted User field.
+    user._doc.attendanceDetails = attendanceDetails;
+  }
   return user;
 };
 
@@ -445,6 +468,13 @@ const updateUserById = async (userId, updateBody) => {
   }
   if (updateBody.email && (await User.isEmailTaken(updateBody.email, userId))) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Email already taken');
+  }
+
+  // The API exposes `status`, while the User model stores the value as
+  // `isActive`. Normalize this before passing the update to Mongoose.
+  if (updateBody.status !== undefined) {
+    updateBody.isActive = updateBody.status;
+    delete updateBody.status;
   }
 
   // ── Handle nested sub-documents separately ─────────────────────────────────
@@ -859,7 +889,7 @@ const uploadUserDocuments = async (userId, files, documentType = 'personal', pre
       if (!doc) continue;
       
       // fileUrl is required (can be 'url' from /v1/media/upload or 'fileUrl')
-      const fileUrl = doc.fileUrl || doc.url;
+      const fileUrl = normalizeFileUrl(doc.fileUrl || doc.url);
       if (!fileUrl) {
         console.warn('[uploadUserDocuments] Skipping document without fileUrl:', doc);
         continue;
@@ -967,7 +997,9 @@ const updateUserDocument = async (userId, documentId, updateBody) => {
   
   allowedUpdates.forEach((field) => {
     if (updateBody[field] !== undefined) {
-      updates[field] = updateBody[field];
+      updates[field] = field === 'fileUrl'
+        ? normalizeFileUrl(updateBody[field])
+        : updateBody[field];
     }
   });
 

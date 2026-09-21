@@ -31,6 +31,18 @@ const uploadMedia = catchAsync(async (req, res) => {
     throw new ApiError(httpStatus.BAD_REQUEST, 'No files provided. Send files via multipart/form-data.');
   }
 
+  // Diagnostic logging: inspect the Cloudinary metadata returned by multer.
+  // Do not log file contents or Cloudinary credentials.
+  console.log('[uploadMedia] Cloudinary response:', req.files.map((file) => ({
+    originalName: file.originalname,
+    path: file.path,
+    publicId: file.filename,
+    resourceType: file.resource_type,
+    mimeType: file.mimetype,
+    format: file.format,
+    size: file.size,
+  })));
+
   const files = mediaService.processUploadedFiles(req.files);
 
   res.status(httpStatus.CREATED).send({

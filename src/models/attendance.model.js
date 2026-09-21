@@ -8,6 +8,8 @@ const attendanceSchema = new mongoose.Schema({
   date: {
     type: Date,
   },
+  // UTC calendar day used for employee/date uniqueness protection.
+  attendanceDay: { type: Date },
   shiftId: {
     type: mongoose.Schema.Types.Mixed,
   },
@@ -29,6 +31,14 @@ const attendanceSchema = new mongoose.Schema({
     type: Number,
     default: 0,
   },
+  attendanceCategory: {
+    type: String,
+    enum: ["fullDay", "halfDay", "absent"],
+  },
+  timingStatus: {
+    type: String,
+    enum: ["onTime", "earlyOut", "arrivedLate"],
+  },
   attendanceStatus: {
     type: String,
     enum: ["onTime", "earlyOut", "arrivedLate"],
@@ -38,10 +48,19 @@ const attendanceSchema = new mongoose.Schema({
     type: String,
     trim: true,
   },
+  isManualOverride: { type: Boolean, default: false },
+  overrideReason: { type: String, trim: true },
+  lastEditedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  lastEditedAt: { type: Date },
+  editReason: { type: String, trim: true },
 });
 
 attendanceSchema.plugin(toJSON);
 attendanceSchema.plugin(paginate);
+attendanceSchema.index(
+  { employeeId: 1, attendanceDay: 1 },
+  { unique: true, partialFilterExpression: { attendanceDay: { $type: 'date' } } },
+);
 
 const Attendance = mongoose.model("Attendance", attendanceSchema);
 module.exports = Attendance;

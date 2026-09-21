@@ -14,6 +14,8 @@ const createAttendance = {
     IsOverTimeWoked: Joi.boolean().optional(),
     overTimeWorkedHours: Joi.number().min(0).optional(),
     totalWorkedHours: Joi.number().min(0).optional(),
+    attendanceCategory: Joi.string().valid('fullDay', 'halfDay', 'absent').optional(),
+    timingStatus: Joi.string().valid('onTime', 'earlyOut', 'arrivedLate').optional(),
     attendanceStatus: Joi.string().valid('onTime', 'earlyOut', 'arrivedLate').optional(),
     remarks: Joi.string().allow('').optional(),
   }),
@@ -27,6 +29,8 @@ const getAttendances = {
     employeeId:       Joi.string().custom(objectId).optional(),
     shiftId:          Joi.string().custom(objectId).optional(),
     attendanceStatus: Joi.string().valid('onTime', 'earlyOut', 'arrivedLate').optional(),
+    timingStatus:     Joi.string().valid('onTime', 'earlyOut', 'arrivedLate').optional(),
+    attendanceCategory: Joi.string().valid('fullDay', 'halfDay', 'absent').optional(),
     // date range on attendance date
     fromDate:         Joi.date().iso().optional(),
     toDate:           Joi.date().iso().optional(),
@@ -45,6 +49,31 @@ const getAttendance = {
   }),
 };
 
+const getEmployeeAttendanceSummary = {
+  params: Joi.object().keys({
+    employeeId: Joi.string().custom(objectId).required(),
+  }),
+  query: Joi.object().keys({
+    fromDate: Joi.date().iso().required(),
+    toDate: Joi.date().iso().required(),
+  }),
+};
+
+const getEmployeeAttendance = {
+  params: Joi.object().keys({ employeeId: Joi.string().custom(objectId).required() }),
+  query: Joi.object().keys({
+    date: Joi.date().iso(), fromDate: Joi.date().iso(), toDate: Joi.date().iso(),
+    attendanceCategory: Joi.string().valid('fullDay', 'halfDay', 'absent'),
+    timingStatus: Joi.string().valid('onTime', 'earlyOut', 'arrivedLate'),
+    sortBy: Joi.string(), limit: Joi.number().integer().min(1), page: Joi.number().integer().min(1),
+  }),
+};
+
+const getEmployeeAttendanceCalendar = {
+  params: Joi.object().keys({ employeeId: Joi.string().custom(objectId).required() }),
+  query: Joi.object().keys({ fromDate: Joi.date().iso().required(), toDate: Joi.date().iso().required() }),
+};
+
 const updateAttendance = {
   params: Joi.object().keys({
     attendanceId: Joi.string().custom(objectId).required(),
@@ -53,16 +82,15 @@ const updateAttendance = {
     .keys({
       date: Joi.date(),
       shiftId: Joi.string().custom(objectId).allow(''),
-      shift: Joi.alternatives().try(Joi.string().custom(objectId), Joi.string()),
       loginTime: Joi.date().allow(null, ''),
       logoutTime: Joi.date().allow(null, ''),
-      checkInTime: Joi.date().allow(null, ''),
-      checkOutTime: Joi.date().allow(null, ''),
-      IsOverTimeWoked: Joi.boolean(),
-      overTimeWorkedHours: Joi.number().min(0),
-      totalWorkedHours: Joi.number().min(0),
-      attendanceStatus: Joi.string().valid('onTime', 'earlyOut', 'arrivedLate'),
+      attendanceCategory: Joi.string().valid('fullDay', 'halfDay', 'absent'),
       remarks: Joi.string().allow(''),
+      // Accepted for compatibility, but ignored and never persisted from the client.
+      totalWorkedHours: Joi.any().strip(),
+      overTimeWorkedHours: Joi.any().strip(),
+      IsOverTimeWoked: Joi.any().strip(),
+      editReason: Joi.string().trim().min(1).required(),
     })
     .min(1),
 };
@@ -77,6 +105,9 @@ module.exports = {
   createAttendance,
   getAttendances,
   getAttendance,
+  getEmployeeAttendanceSummary,
+  getEmployeeAttendance,
+  getEmployeeAttendanceCalendar,
   updateAttendance,
   deleteAttendance,
 };

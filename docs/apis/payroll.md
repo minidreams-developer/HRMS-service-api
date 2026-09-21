@@ -8,6 +8,10 @@ Base URL: `/v1/payroll`
 
 The payroll API manages employee payroll computation and lifecycle, including **Stop** and **Resume** functionality. Payroll figures are computed on-the-fly from attendance, leave, and overtime data, while manual adjustments are stored separately.
 
+### Attendance reconciliation
+
+Payroll uses the persisted `Attendance.attendanceCategory` (`fullDay`, `halfDay`, or `absent`) as the source of truth. It does not reclassify current attendance from worked hours; this preserves audited manual overrides. Attendance records without a category are reported as legacy records and are excluded from day-category counts until separately migrated or corrected. Approved `Overtime` records remain the only payroll overtime source.
+
 ### Payroll Status Lifecycle
 
 ```

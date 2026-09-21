@@ -87,6 +87,8 @@ const updateUser = {
       email: Joi.string().email(),
       password: Joi.string().custom(password),
       name: Joi.string(),
+      // Public API status maps to the User model's isActive field.
+      status: Joi.string().custom(statusValidator),
       employee: Joi.object().keys({
         employeeId: Joi.string(),
         designation: Joi.string(),
@@ -101,8 +103,13 @@ const updateUser = {
         ),
         employeeType: Joi.string().valid('full_time', 'part_time'),
         joinedDate: Joi.date(),
-      }),
+      }).unknown(true),
     })
+    // The update service supports the wider employee profile payload
+    // (phone, gender, addresses, emergencyContacts, workInformation, etc.).
+    // Keep validation for declared fields, but pass supported profile fields
+    // through instead of rejecting them as unknown keys.
+    .unknown(true)
     .min(1),
 };
 
