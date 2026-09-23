@@ -2,26 +2,27 @@ const express = require('express');
 const leaveRequestsController = require('../../controllers/leaveRequests.controller');
 const validate = require('../../middlewares/validate');
 const leaveRequestsValidation = require('../../validations/leaveRequests.validation');
+const auth = require('../../middlewares/auth');
 
 const router = express.Router();
 
 router
   .route('/')
-  .post(validate(leaveRequestsValidation.createLeaveRequest), leaveRequestsController.createLeaveRequests)
-  .get(validate(leaveRequestsValidation.getLeaveRequests), leaveRequestsController.getLeaveRequests);
+  .post(auth(), validate(leaveRequestsValidation.createLeaveRequest), leaveRequestsController.createLeaveRequests)
+  .get(auth(), validate(leaveRequestsValidation.getLeaveRequests), leaveRequestsController.getLeaveRequests);
 
 router
   .route('/employee/:employeeId')
-  .get(validate(leaveRequestsValidation.getLeaveRequestsByEmployee), leaveRequestsController.getLeaveRequestsByEmployee);
+  .get(auth(), validate(leaveRequestsValidation.getLeaveRequestsByEmployee), leaveRequestsController.getLeaveRequestsByEmployee);
 
 router
   .route('/:leaveRequestId')
-  .get(validate(leaveRequestsValidation.getLeaveRequestById), leaveRequestsController.getLeaveRequestsById)
-  .patch(validate(leaveRequestsValidation.updateLeaveRequest), leaveRequestsController.updateLeaveRequests)
-  .delete(validate(leaveRequestsValidation.deleteLeaveRequest), leaveRequestsController.deleteLeaveRequests);
+  .get(auth(), validate(leaveRequestsValidation.getLeaveRequestById), leaveRequestsController.getLeaveRequestsById)
+  .patch(auth(), validate(leaveRequestsValidation.updateLeaveRequest), leaveRequestsController.updateLeaveRequests)
+  .delete(auth(), validate(leaveRequestsValidation.deleteLeaveRequest), leaveRequestsController.deleteLeaveRequests);
 
 router
   .route('/:leaveRequestId/status')
-  .patch(validate(leaveRequestsValidation.updateLeaveStatus), leaveRequestsController.updateLeaveStatus);
+  .patch(auth(), validate(leaveRequestsValidation.updateLeaveStatus), leaveRequestsController.updateLeaveStatus);
 
 module.exports = router;

@@ -11,8 +11,8 @@ const SHIFT_CODE_KEY = 'shiftCode';
  * @param {Object} body
  * @returns {Promise<Shift>}
  */
-const createShift = async (body) => {
-  const shift = await Shift.create(body);
+const createShift = async (body, actor) => {
+  const shift = await Shift.create({ ...body, createdBy: actor?._id });
   if (body.shiftCode && body.shiftCode === getPending(SHIFT_CODE_KEY)) {
     clearPending(SHIFT_CODE_KEY);
   }
@@ -88,12 +88,12 @@ const getShiftById = async (id) => {
  * @param {Object} updateBody
  * @returns {Promise<Shift>}
  */
-const updateShiftById = async (id, updateBody) => {
+const updateShiftById = async (id, updateBody, actor) => {
   const shift = await getShiftById(id);
   if (!shift) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Shift not found');
   }
-  Object.assign(shift, updateBody);
+  Object.assign(shift, updateBody, { updatedBy: actor?._id });
   await shift.save();
   return shift;
 };
@@ -103,12 +103,15 @@ const updateShiftById = async (id, updateBody) => {
  * @param {ObjectId} id
  * @returns {Promise<Shift>}
  */
-const deleteShiftById = async (id) => {
+const deleteShiftById = async (id, actor) => {
   const shift = await getShiftById(id);
   if (!shift) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Shift not found');
   }
-  await shift.deleteOne();
+  shift.isShiftActive = false;
+  shift.deactivatedBy = actor?._id;
+  shift.deactivatedAt = new Date();
+  await shift.save();
   return shift;
 };
 

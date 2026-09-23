@@ -53,6 +53,17 @@ const attendanceSchema = new mongoose.Schema({
   lastEditedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   lastEditedAt: { type: Date },
   editReason: { type: String, trim: true },
+  shiftSnapshot: {
+    shiftId: mongoose.Schema.Types.ObjectId,
+    shiftName: String,
+    shiftCode: String,
+    minWorkingHours: String,
+    halfDayWorkingHours: String,
+    breakEnabled: Boolean,
+    breakDuration: Number,
+    weekOff: [String],
+    timings: [{ day: String, startTime: String, endTime: String, off: Boolean }],
+  },
 });
 
 attendanceSchema.plugin(toJSON);

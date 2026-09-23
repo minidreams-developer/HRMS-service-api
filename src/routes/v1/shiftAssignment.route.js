@@ -1,0 +1,10 @@
+const express = require('express');
+const auth = require('../../middlewares/auth');
+const validate = require('../../middlewares/validate');
+const validation = require('../../validations/shiftAssignment.validation');
+const controller = require('../../controllers/shiftAssignment.controller');
+const router = express.Router();
+router.post('/', auth(), validate(validation.create), controller.assign);
+router.get('/employee/:employeeId', auth(), validate(validation.employee), controller.list);
+router.get('/:assignmentId', auth(), validate(validation.id), controller.get);
+module.exports = router;

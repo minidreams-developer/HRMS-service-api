@@ -1,7 +1,9 @@
 const httpStatus = require('http-status');
 const mongoose = require('mongoose');
-const { User, Attendance, LeaveRequests, Overtime, Payroll } = require('../models');
+const { User, Attendance, LeaveRequests, LeaveBalance, Overtime, Payroll } = require('../models');
 const ApiError = require('../utils/ApiError');
+const { calculateLeaveDays } = require('./leaveRequests.service');
+const { detectOverlappingOvertime } = require('./overtimeOverlap.service');
 
 // Working days per month used for daily-rate calculation (industry standard: 26)
 const WORKING_DAYS_PER_MONTH = 26;
@@ -9,9 +11,6 @@ const WORKING_DAYS_PER_MONTH = 26;
 // Overtime rate multiplier (1.5x of daily rate per hour, assuming 8h day)
 const OVERTIME_HOURLY_MULTIPLIER = 1.5;
 const WORK_HOURS_PER_DAY = 8;
-
-// Leave types that are considered "paid"
-const PAID_LEAVE_TYPES = ['paidLeave', 'paid_leave', 'PaidLeave', 'casual', 'sick', 'annual', 'CL', 'SL', 'EL'];
 
 /**
  * Build the start and end Date objects for a given month/year (UTC).
@@ -71,30 +70,41 @@ const computePayrollForEmployee = async (employee, month, year, payrollOverride 
     employeeId: employeeObjectId,
     status: 'approved',
     $or: [
-      { startDate: { $gte: start, $lte: end } },
-      { endDate: { $gte: start, $lte: end } },
       { singleDate: { $gte: start, $lte: end } },
+      { startDate: { $lte: end }, endDate: { $gte: start } },
     ],
   }).lean();
 
   let paidLeaves = 0;
   let unpaidLeaves = 0;
+  let unclassifiedLeaves = 0;
+  let unclassifiedLeaveDays = 0;
 
   for (const leave of leaveRecords) {
-    // Count the number of leave days that fall within this month
-    let leaveDays = 1;
-    if (leave.startDate && leave.endDate) {
-      const leaveStart = leave.startDate < start ? start : leave.startDate;
-      const leaveEnd = leave.endDate > end ? end : leave.endDate;
-      const diffMs = leaveEnd - leaveStart;
-      leaveDays = Math.max(1, Math.ceil(diffMs / (1000 * 60 * 60 * 24)) + 1);
-    }
+    const leaveStart = leave.singleDate || leave.startDate;
+    const leaveEnd = leave.singleDate || leave.endDate || leave.startDate;
+    if (!leaveStart || !leaveEnd) continue;
+    const periodStart = new Date(Math.max(new Date(leaveStart).getTime(), start.getTime()));
+    const periodEnd = new Date(Math.min(new Date(leaveEnd).getTime(), end.getTime()));
+    if (periodStart > periodEnd) continue;
+    const leaveDays = await calculateLeaveDays(employeeObjectId, periodStart, periodEnd, leave.leaveDuration || 'fullDay');
+    if (!leaveDays) continue;
 
-    const isPaid = PAID_LEAVE_TYPES.some((t) =>
-      (leave.leaveType || '').toLowerCase().includes(t.toLowerCase())
-    );
-    if (isPaid) paidLeaves += leaveDays;
-    else unpaidLeaves += leaveDays;
+    const normalizedType = String(leave.leaveType || '').trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const configuredBalance = await LeaveBalance.findOne({
+      employeeId: employeeObjectId,
+      leaveType: { $regex: `^${normalizedType}$`, $options: 'i' },
+      year: year,
+    }).lean();
+    if (configuredBalance) {
+      if (configuredBalance.isPaid) paidLeaves += leaveDays;
+      else unpaidLeaves += leaveDays;
+    } else if (String(leave.leaveType || '').trim().toLowerCase() === 'unpaid leave') {
+      unpaidLeaves += leaveDays;
+    } else {
+      unclassifiedLeaves += 1;
+      unclassifiedLeaveDays += leaveDays;
+    }
   }
 
   // ── 3. Overtime ───────────────────────────────────────────────────────────
@@ -104,9 +114,9 @@ const computePayrollForEmployee = async (employee, month, year, payrollOverride 
     OvertimeDate: { $gte: start, $lte: end },
   }).lean();
 
+  const overtimeDiagnostics = detectOverlappingOvertime(overtimeRecords);
   const totalOvertimeHours = overtimeRecords.reduce(
-    (sum, rec) => sum + (rec.totalDuration || 0),
-    0
+    (sum, rec) => overtimeDiagnostics.overlappingIds.has(String(rec._id)) ? sum : sum + (rec.totalDuration || 0), 0
   );
 
   // ── 4. Salary & daily rate ────────────────────────────────────────────────
@@ -170,11 +180,15 @@ const computePayrollForEmployee = async (employee, month, year, payrollOverride 
     duplicateAttendanceDates,
     paidLeaves,
     unpaidLeaves,
+    unclassifiedLeaves,
+    unclassifiedLeaveDays,
     dailyRate,
     grossWages,
     earnedWages,
     otherWages,
     overtimeAmount,
+    overlappingOvertimeRecords: overtimeDiagnostics.groups,
+    overlappingOvertimeDates: overtimeDiagnostics.overlappingDates,
     extras,
     grossEarnings,
     penalties,

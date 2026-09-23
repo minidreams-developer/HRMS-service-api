@@ -115,6 +115,13 @@ const userSchema = mongoose.Schema(
       type: String,
     },
 
+    // Numeric face-recognition descriptor. Never expose this field in API responses.
+    faceEmbedding: {
+      type: [Number],
+      select: false,
+      default: undefined,
+    },
+
     address: [{
       type: mongoose.Schema.Types.ObjectId,
       ref: "Address"

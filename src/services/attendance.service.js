@@ -1,6 +1,8 @@
 const httpStatus = require('http-status');
 const mongoose = require('mongoose');
 const { Attendance, Holiday, LeaveRequests, Overtime, User, Shift } = require('../models');
+const { detectOverlappingOvertime } = require('./overtimeOverlap.service');
+const { getEmployeeShiftForDate } = require('./shiftAssignment.service');
 const ApiError = require('../utils/ApiError');
 
 const utcDay = (value) => {
@@ -21,6 +23,10 @@ const getShiftForAttendance = async (shiftId) => {
 
 const deriveAttendance = async (body, existing = null, options = {}) => {
   const record = { ...(existing || {}), ...body };
+  if (!record.shiftId && record.employeeId && record.date) {
+    const resolved = await getEmployeeShiftForDate(record.employeeId, record.date);
+    if (resolved) record.shiftId = resolved._id;
+  }
   const explicitlyAbsent = body.attendanceCategory === 'absent' && !record.loginTime && !record.logoutTime;
   if (explicitlyAbsent) {
     record.totalWorkedHours = 0;
@@ -42,8 +48,11 @@ const deriveAttendance = async (body, existing = null, options = {}) => {
   }
 
   const shift = await getShiftForAttendance(record.shiftId);
-  const fullDayThreshold = parseWorkingHours(shift?.minWorkingHours);
-  const halfDayThreshold = parseWorkingHours(shift?.halfDayWorkingHours);
+  const snapshotMatchesShift = existing?.shiftSnapshot?.shiftId
+    && (!record.shiftId || String(existing.shiftSnapshot.shiftId) === String(record.shiftId));
+  const shiftConfig = snapshotMatchesShift ? existing.shiftSnapshot : shift;
+  const fullDayThreshold = parseWorkingHours(shiftConfig?.minWorkingHours);
+  const halfDayThreshold = parseWorkingHours(shiftConfig?.halfDayWorkingHours);
   if (!shift || !fullDayThreshold || !halfDayThreshold) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Shift must have valid minWorkingHours and halfDayWorkingHours');
   }
@@ -51,7 +60,12 @@ const deriveAttendance = async (body, existing = null, options = {}) => {
     throw new ApiError(httpStatus.BAD_REQUEST, 'halfDayWorkingHours must be less than or equal to minWorkingHours');
   }
 
-  const breakMinutes = shift.breakManagement?.duration || 0;
+  const breakMinutes = shiftConfig?.breakEnabled === true
+    ? (shiftConfig.breakDuration || 0)
+    : (shift?.breakManagement?.enabled === true ? (shift.breakManagement.duration || 0) : 0);
+  if (shift && record.shiftId && (!record.shiftSnapshot || !snapshotMatchesShift)) {
+    record.shiftSnapshot = { shiftId: shift._id, shiftName: shift.shiftName, shiftCode: shift.shiftCode, minWorkingHours: shift.minWorkingHours, halfDayWorkingHours: shift.halfDayWorkingHours, breakEnabled: shift.breakManagement?.enabled === true, breakDuration: breakMinutes, weekOff: shift.weekOff || [], timings: shift.timings || [] };
+  }
   const totalWorkedHours = Math.max(0, grossHours - (breakMinutes / 60));
   record.totalWorkedHours = Number(totalWorkedHours.toFixed(4));
   record.attendanceCategory = totalWorkedHours >= fullDayThreshold
@@ -328,8 +342,10 @@ const getEmployeeAttendanceSummary = async (employeeId, fromDate, toDate) => {
   }
 
   const countCategory = (category) => [...attendanceByDay.values()].filter((record) => record.attendanceCategory === category).length;
-  const overtimeDays = new Set(overtimeRecords.map((record) => dayKey(record.OvertimeDate))).size;
-  const overtimeHours = overtimeRecords.reduce((sum, record) => sum + (record.totalDuration || 0), 0);
+  const overtimeDiagnostics = detectOverlappingOvertime(overtimeRecords);
+  const safeOvertime = overtimeRecords.filter((record) => !overtimeDiagnostics.overlappingIds.has(String(record._id)));
+  const overtimeDays = new Set(safeOvertime.map((record) => dayKey(record.OvertimeDate))).size;
+  const overtimeHours = safeOvertime.reduce((sum, record) => sum + (record.totalDuration || 0), 0);
   const holidayCount = holidayDays.size;
   const dayOffCount = [...dayOffDays].filter((key) => !holidayDays.has(key)).length;
 
@@ -348,6 +364,8 @@ const getEmployeeAttendanceSummary = async (employeeId, fromDate, toDate) => {
     holidays: holidayCount,
     leaves: leaveDays.size,
     duplicateAttendanceDates,
+    overlappingOvertimeRecords: overtimeDiagnostics.groups,
+    overlappingOvertimeDates: overtimeDiagnostics.overlappingDates,
   };
 };
 
@@ -397,15 +415,33 @@ const getEmployeeCalendar = async (employeeId, fromDate, toDate) => {
     if (start) for (const date of enumerateDays(Math.max(from, utcDay(start)), Math.min(to, utcDay(end)))) leaveDays.add(dayKey(date));
   }
   const holidayDays = new Map(holidays.map((holiday) => [dayKey(holiday.date), holiday]));
-  const overtimeByDay = new Map(overtime.map((record) => [dayKey(record.OvertimeDate), record]));
+  const overtimeDiagnostics = detectOverlappingOvertime(overtime);
+  const overtimeByDay = new Map(overtime.filter((record) => !overtimeDiagnostics.overlappingIds.has(String(record._id))).map((record) => [dayKey(record.OvertimeDate), record]));
   return enumerateDays(from, to).map((date) => {
     const key = dayKey(date); const record = byDate.get(key);
     const holiday = holidayDays.get(key);
     const dayOff = weekOff.has(date.toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' }).toLowerCase());
     const category = duplicateCounts.has(key) ? 'duplicate' : holiday ? 'holiday' : dayOff ? 'dayOff' : leaveDays.has(key) ? 'leave' : record?.attendanceCategory;
     const ot = overtimeByDay.get(key);
-    return { date: key, category, attendanceCategory: record?.attendanceCategory, timingStatus: record?.timingStatus || record?.attendanceStatus, totalWorkedHours: record?.totalWorkedHours || 0, approvedOvertime: ot ? { hours: ot.totalDuration || 0, id: ot.id || ot._id } : null, attendanceId: record?.id || record?._id, duplicateAttendanceCount: duplicateCounts.get(key) || 0 };
+    return { date: key, category, attendanceCategory: record?.attendanceCategory, timingStatus: record?.timingStatus || record?.attendanceStatus, totalWorkedHours: record?.totalWorkedHours || 0, approvedOvertime: ot ? { hours: ot.totalDuration || 0, id: ot.id || ot._id } : null, overtimeConflict: overtimeDiagnostics.overlappingDates.includes(key), attendanceId: record?.id || record?._id, duplicateAttendanceCount: duplicateCounts.get(key) || 0 };
   });
+};
+
+const getPresentEmployeesToday = async (date = new Date(), role = null) => {
+  const start = utcDay(date); const end = new Date(start.getTime() + 86400000);
+  const rows = await Attendance.find({ $or: [
+    { attendanceDay: { $gte: start, $lt: end } },
+    { attendanceDay: { $exists: false }, date: { $gte: start, $lt: end } },
+  ], loginTime: { $ne: null }, attendanceCategory: { $ne: 'absent' } }).sort({ loginTime: 1 }).lean();
+  const employeeIds = rows.map((row) => row.employeeId).filter(Boolean);
+  const users = await User.find({ _id: { $in: employeeIds } }).select('name employeeId email role isActive workInformation.department workInformation.designation').lean();
+  const usersById = new Map(users.map((user) => [String(user._id), user]));
+  return rows.map((row) => ({ row, employee: usersById.get(String(row.employeeId)) }))
+    .filter(({ employee }) => employee && ['employee', 'staff'].includes(employee.role) && (!role || employee.role === role))
+    .map(({ row, employee }) => ({
+    attendanceId: row._id, employee, date: row.attendanceDay || row.date, loginTime: row.loginTime, logoutTime: row.logoutTime,
+    attendanceCategory: row.attendanceCategory, timingStatus: row.timingStatus || row.attendanceStatus, totalWorkedHours: row.totalWorkedHours || 0,
+  }));
 };
 
 module.exports = {
@@ -417,4 +453,5 @@ module.exports = {
   getEmployeeAttendanceSummary,
   getEmployeeAttendance,
   getEmployeeCalendar,
+  getPresentEmployeesToday,
 };

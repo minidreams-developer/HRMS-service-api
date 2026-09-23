@@ -148,6 +148,10 @@ const shiftSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    deactivatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    deactivatedAt: Date,
   },
   { timestamps: true }
 );

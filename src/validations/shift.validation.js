@@ -9,9 +9,9 @@ const breakSchema = Joi.object().keys({
 });
 
 const timingSchema = Joi.object().keys({
-  day: Joi.string().allow('').optional(),
-  startTime: Joi.string().allow('').optional(),
-  endTime: Joi.string().allow('').optional(),
+  day: Joi.string().valid('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday').required(),
+  startTime: Joi.string().pattern(/^([01]\d|2[0-3]):[0-5]\d$/).when('off', { is: true, then: Joi.optional().allow(''), otherwise: Joi.required() }),
+  endTime: Joi.string().pattern(/^([01]\d|2[0-3]):[0-5]\d$/).when('off', { is: true, then: Joi.optional().allow(''), otherwise: Joi.required() }),
   off: Joi.boolean().optional(),
 });
 
@@ -38,6 +38,19 @@ const attendanceRulesSchema = Joi.object().keys({
 const workingHoursString = Joi.string().pattern(/^\d+(?:\.\d+)?h$/).optional();
 
 const shiftBody = Joi.object().keys({
+  shiftType: Joi.string().valid('Fixed', 'Flexible').optional(),
+  timings: Joi.array().items(timingSchema).custom((items, helpers) => {
+    const days = items.map((item) => item.day.toLowerCase());
+    if (new Set(days).size !== days.length) return helpers.error('any.invalid');
+    for (const item of items) if (!item.off && item.startTime === item.endTime) return helpers.error('any.invalid');
+    return items;
+  }).optional(),
+  totalShiftDuration: Joi.string().pattern(/^\d+(?:\.\d+)?h$/).optional(),
+  weekOff: Joi.array().items(Joi.string().valid('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday')).optional(),
+  breakManagement: breakManagementSchema,
+  gracePeriod: gracePeriodSchema,
+  attendanceRules: attendanceRulesSchema,
+  isShiftActive: Joi.boolean(),
   minWorkingHours: workingHoursString,
   halfDayWorkingHours: workingHoursString,
 }).unknown(true).custom((value, helpers) => {
@@ -45,7 +58,8 @@ const shiftBody = Joi.object().keys({
     if (!value.minWorkingHours || !value.halfDayWorkingHours) return helpers.error('any.invalid');
     const full = Number.parseFloat(value.minWorkingHours);
     const half = Number.parseFloat(value.halfDayWorkingHours);
-    if (!(full > 0) || !(half > 0) || half > full) {
+    const total = value.totalShiftDuration ? Number.parseFloat(value.totalShiftDuration) : null;
+    if (!(full > 0) || !(half > 0) || half > full || (total !== null && full > total)) {
       return helpers.error('any.invalid');
     }
   }

@@ -3,9 +3,12 @@ const pick = require('../utils/pick');
 const ApiError = require('../utils/ApiError');
 const catchAsync = require('../utils/catchAsync');
 const { shiftService } = require('../services');
+const managementRoles = new Set(['manager', 'hr_manager', 'subAdmin', 'admin']);
+const requireManagement = (req) => { if (!managementRoles.has(req.user.role)) throw new ApiError(httpStatus.FORBIDDEN, 'Only management may manage shifts'); };
 
 const createShift = catchAsync(async (req, res) => {
-  const shift = await shiftService.createShift(req.body);
+  requireManagement(req);
+  const shift = await shiftService.createShift(req.body, req.user);
   res.status(httpStatus.CREATED).send(shift);
 });
 
@@ -25,12 +28,14 @@ const getShift = catchAsync(async (req, res) => {
 });
 
 const updateShift = catchAsync(async (req, res) => {
-  const shift = await shiftService.updateShiftById(req.params.shiftId, req.body);
+  requireManagement(req);
+  const shift = await shiftService.updateShiftById(req.params.shiftId, req.body, req.user);
   res.send(shift);
 });
 
 const deleteShift = catchAsync(async (req, res) => {
-  await shiftService.deleteShiftById(req.params.shiftId);
+  requireManagement(req);
+  await shiftService.deleteShiftById(req.params.shiftId, req.user);
   res.status(httpStatus.NO_CONTENT).send();
 });
 

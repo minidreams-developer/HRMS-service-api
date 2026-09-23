@@ -23,10 +23,28 @@ const overtimeSchema = new mongoose.Schema({
     },
     status: {
         type: String,
-        enum: ["pending", "approved"],
+        enum: ["pending", "approved", "rejected", "cancelled"],
         default: "pending"
     },
+    reason: { type: String, trim: true },
+    approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    approvedAt: Date,
+    rejectedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    rejectedAt: Date,
+    rejectionReason: { type: String, trim: true },
+    cancelledBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    cancelledAt: Date,
+    cancellationReason: { type: String, trim: true },
+    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    statusHistory: [{
+        status: { type: String, enum: ['pending', 'approved', 'rejected', 'cancelled'], required: true },
+        changedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+        changedAt: { type: Date, default: Date.now },
+        reason: { type: String, trim: true },
+    }],
 }, { timestamps: true });
+
+overtimeSchema.index({ employeeId: 1, startTime: 1, endTime: 1, status: 1 });
 
 overtimeSchema.plugin(toJSON);
 overtimeSchema.plugin(paginate);

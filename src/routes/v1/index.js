@@ -12,6 +12,7 @@ const offBoardRoute = require('./offBoard.route');
 const attendanceRoute = require('./attendance.route');
 const shiftRoute = require('./shift.route');
 const leaveRequestsRoute = require('./leaveRequests.route');
+const leaveBalanceRoute = require('./leaveBalance.route');
 const overtimeRoute = require('./overtimeManagement.route');
 const holidayRoute = require('./holiday.route');
 const contractorRoute = require('./contractor.route');
@@ -25,6 +26,9 @@ const docsRoute = require('./docs.route');
 const config = require('../../config/config');
 const seriesConfiguration = require('./seriesConfiguration.route');
 const mediaRoute = require('./media.route');
+const faceRoute = require('./face.route');
+const permissionRoute = require('./permission.route');
+const shiftAssignmentRoute = require('./shiftAssignment.route');
 
 const router = express.Router();
 
@@ -82,6 +86,12 @@ const defaultRoutes = [
     route: leaveRequestsRoute,
   },
   {
+    path: '/leave-balances',
+    route: leaveBalanceRoute,
+  },
+  { path: '/permissions', route: permissionRoute },
+  { path: '/shift-assignments', route: shiftAssignmentRoute },
+  {
     path: '/overtime',
     route: overtimeRoute,
   },
@@ -136,6 +146,10 @@ const defaultRoutes = [
   {
     path: '/media',
     route: mediaRoute,
+  },
+  {
+    path: '/face',
+    route: faceRoute,
   },
 ];
 

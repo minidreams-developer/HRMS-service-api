@@ -1,5 +1,5 @@
 const httpStatus = require('http-status');
-const { User, Attendance, Address, BankDetails, SalaryDetails, Commission } = require('../models');
+const { User, Attendance, Address, BankDetails, SalaryDetails, Commission, Shift, ShiftAssignment } = require('../models');
 const EmergencyContact = require('../models/emergencyContact.model');
 const UserDocument = require('../models/userDocuments.model');
 const ApiError = require('../utils/ApiError');
@@ -17,6 +17,12 @@ const toObjectId = (val) => {
     return new mongoose.Types.ObjectId(val);
   }
   return val;
+};
+const validateShiftAssignment = async (shiftId) => {
+  if (!shiftId) return;
+  const shift = await Shift.findById(shiftId).lean();
+  if (!shift) throw new ApiError(httpStatus.BAD_REQUEST, 'Shift not found');
+  if (!shift.isShiftActive) throw new ApiError(httpStatus.BAD_REQUEST, 'Inactive Shift cannot be assigned to a new employee');
 };
 
 const EMP_ID_KEY  = 'employeeId';
@@ -37,6 +43,7 @@ const normalizeFileUrl = (value) => {
  * @returns {Promise<User>}
  */
 const registerEmployee = async (body) => {
+  await validateShiftAssignment(toObjectId(body.workInformation?.shiftId));
   if (body.email && (await User.isEmailTaken(body.email))) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Email already taken');
   }
@@ -171,6 +178,12 @@ const registerEmployee = async (body) => {
 
   return User.create(userData).then(async (user) => {
     clearPending(EMP_ID_KEY);
+    if (user.workInformation?.shiftId) {
+      const effective = body.workInformation?.joinedDate && !Number.isNaN(new Date(body.workInformation.joinedDate).getTime())
+        ? new Date(body.workInformation.joinedDate) : new Date();
+      const utc = new Date(Date.UTC(effective.getUTCFullYear(), effective.getUTCMonth(), effective.getUTCDate()));
+      await ShiftAssignment.create({ employeeId: user._id, shiftId: user.workInformation.shiftId, effectiveFrom: utc, assignedAt: new Date(), reason: 'Initial employee assignment' });
+    }
 
     // Save documentImage[] if provided (pre-uploaded Cloudinary URLs)
     const rawDocs = body.documentImage || [];
@@ -209,7 +222,10 @@ const createUser = async (userBody) => {
   if (userBody.email && (await User.isEmailTaken(userBody.email))) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Email already taken');
   }
-  return User.create(userBody);
+  await validateShiftAssignment(toObjectId(userBody.workInformation?.shiftId));
+  const user = await User.create(userBody);
+  if (user.workInformation?.shiftId) await ShiftAssignment.create({ employeeId: user._id, shiftId: user.workInformation.shiftId, effectiveFrom: new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate())), reason: 'Initial employee assignment' });
+  return user;
 };
 const isObjectId = (val) => mongoose.Types.ObjectId.isValid(val) && String(new mongoose.Types.ObjectId(val)) === String(val);
 
@@ -466,6 +482,7 @@ const updateUserById = async (userId, updateBody) => {
   if (!user) {
     throw new ApiError(httpStatus.NOT_FOUND, 'User not found');
   }
+  if (updateBody.workInformation?.shiftId) await validateShiftAssignment(toObjectId(updateBody.workInformation.shiftId));
   if (updateBody.email && (await User.isEmailTaken(updateBody.email, userId))) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Email already taken');
   }

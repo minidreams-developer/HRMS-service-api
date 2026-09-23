@@ -15,6 +15,16 @@ const createLeaveRequest = {
     department: Joi.string().custom(objectId).optional(),
     designation: Joi.string().optional(),
     reason: Joi.string().optional(),
+    leaveDuration: Joi.string().valid('fullDay', 'halfDay').default('fullDay'),
+    halfDaySession: Joi.string().valid('firstHalf', 'secondHalf').allow(null, '').optional(),
+  }).custom((value, helpers) => {
+    const hasSingle = Boolean(value.singleDate);
+    const hasRange = Boolean(value.startDate || value.endDate);
+    if (hasSingle === hasRange) return helpers.error('any.invalid');
+    if (value.leaveDuration === 'halfDay' && (!hasSingle || !value.halfDaySession)) return helpers.error('any.invalid');
+    if (value.leaveDuration === 'fullDay' && value.halfDaySession) return helpers.error('any.invalid');
+    if (hasRange && (!value.startDate || !value.endDate)) return helpers.error('any.invalid');
+    return value;
   }),
 };
 
@@ -24,8 +34,9 @@ const getLeaveRequests = {
     search:       Joi.string().optional(),
     // direct filters
     employeeId:   Joi.string().custom(objectId).optional(),
+    role:         Joi.string().valid('employee', 'staff').optional(),
     leaveType:    Joi.string().optional(),
-    status:       Joi.string().valid('pending', 'approved', 'ended').optional(),
+    status:       Joi.string().valid('pending', 'approved', 'rejected', 'cancelled', 'ended').optional(),
     departmentId: Joi.string().custom(objectId).optional(),
     // date range — covers startDate / singleDate
     fromDate:     Joi.date().iso().optional(),
@@ -51,6 +62,11 @@ const getLeaveRequestsByEmployee = {
     sortBy: Joi.string(),
     limit: Joi.number().integer(),
     page: Joi.number().integer(),
+    status: Joi.string().valid('pending', 'approved', 'rejected', 'cancelled', 'ended'),
+    leaveType: Joi.string(),
+    fromDate: Joi.date().iso(),
+    toDate: Joi.date().iso(),
+    year: Joi.number().integer().min(2000).max(2100),
   }),
 };
 
@@ -76,7 +92,12 @@ const updateLeaveStatus = {
     leaveRequestId: Joi.string().custom(objectId).required(),
   }),
   body: Joi.object().keys({
-    status: Joi.string().valid('pending', 'approved', 'ended').required(),
+    status: Joi.string().valid('approved', 'rejected', 'cancelled').required(),
+    cancellationReason: Joi.string().allow('').optional(),
+    rejectionReason: Joi.string().allow('').optional(),
+  }).custom((value, helpers) => {
+    if (value.status === 'cancelled' && !String(value.cancellationReason || '').trim()) return helpers.error('any.invalid');
+    return value;
   }),
 };
 

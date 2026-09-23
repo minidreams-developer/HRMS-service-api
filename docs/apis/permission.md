@@ -2,7 +2,9 @@
 
 Base URL: `/v1/permissions`
 
-Manages short-duration permission requests (e.g. leaving early, arriving late) for employees.
+Manages short-duration permission requests (e.g. leaving early, arriving late) for employees. Permissions are separate from leave balances and attendance records.
+
+Statuses are `pending`, `approved`, `rejected`, and `cancelled`. Employees may create and view only their own requests; managers, HR managers, sub-admins, and admins may manage requests. `totalHours` is calculated from `from` and `to`; client-supplied values are ignored. Active (`pending`/`approved`) overlapping times for the same employee/day are rejected. Approved full-day leave blocks creation for that date. Half-day clock boundaries, holidays, week-offs, and attendance effects are intentionally not inferred by this API.
 
 ---
 

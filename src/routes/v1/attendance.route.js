@@ -11,6 +11,11 @@ router
   .post(validate(attendanceValidation.createAttendance), attendanceController.createAttendance)
     .get(validate(attendanceValidation.getAttendances), attendanceController.getAttendances);
 
+router.route('/present-today').get(auth(), (req, res, next) => {
+  if (req.query.role && !['employee', 'staff'].includes(req.query.role)) return res.status(400).send({ code: 400, message: 'role must be employee or staff' });
+  return attendanceController.getPresentEmployeesToday(req, res, next);
+});
+
 router
   .route('/employee/:employeeId/summary')
   .get(auth(), validate(attendanceValidation.getEmployeeAttendanceSummary), attendanceController.getEmployeeAttendanceSummary);

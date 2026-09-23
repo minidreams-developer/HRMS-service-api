@@ -2,6 +2,14 @@
 
 Base URL: `/v1/overtime`
 
+Approved requests may be cancelled by management only using `PATCH /v1/overtime/:overtimeId/status` with `status: "cancelled"` and a required `cancellationReason`. Cancellation stores actor/time metadata and status history. Cancelled OT is excluded from Payroll and Attendance calculations. To correct approved OT, cancel the old request and create a new pending request; approved and cancelled records remain immutable.
+
+Legacy approved records may overlap. Payroll and attendance summary diagnostics expose `overlappingOvertimeRecords` and `overlappingOvertimeDates`; ambiguous overlapping records are excluded from aggregated OT hours rather than merged, deleted, or assigned a winner. Calendar entries expose `overtimeConflict` for affected dates.
+
+All endpoints require authentication. Employees may create and view only their own overtime; managers, HR managers, sub-admins, and admins may manage overtime for other employees. New requests require `employeeId`, `OvertimeDate`, `startTime`, `endTime`, and `reason`. `totalDuration` is calculated server-side in hours from the timestamps; client-supplied duration is not accepted. Overnight ranges are supported when the start timestamp is on `OvertimeDate`.
+
+Statuses are `pending`, `approved`, `rejected`, and `cancelled`. Only management may approve, reject, or cancel. Rejection and cancellation require a reason and store actor/time metadata. Only pending requests may change status or be edited; approved, rejected, and cancelled requests are immutable. Pending and approved overlapping time ranges for the same employee are blocked; rejected and cancelled ranges do not block, and adjacent ranges are allowed. Approved OT remains the source for payroll and attendance OT summaries. OT does not automatically modify Attendance, and holiday/week-off requests have no special rate in this version.
+
 ---
 
 ## Create Overtime Request

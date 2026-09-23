@@ -1,13 +1,33 @@
 const httpStatus = require('http-status');
 const mongoose = require('mongoose');
-const { Overtime } = require('../models');
+const { Overtime, User } = require('../models');
 const ApiError = require('../utils/ApiError');
 
 /**
  * Create an overtime request
  */
-const createOvertime = async (body) => {
-  return Overtime.create(body);
+const managementRoles = new Set(['manager', 'hr_manager', 'subAdmin', 'admin']);
+const isManagement = (user) => managementRoles.has(user.role);
+const utcDay = (value) => new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()));
+const validateTimes = (body) => {
+  const start = new Date(body.startTime); const end = new Date(body.endTime); const date = new Date(body.OvertimeDate);
+  if ([start, end, date].some((v) => Number.isNaN(v.getTime()))) throw new ApiError(httpStatus.BAD_REQUEST, 'Invalid overtime date or time');
+  if (end <= start) throw new ApiError(httpStatus.BAD_REQUEST, 'endTime must be after startTime');
+  if (utcDay(start).getTime() !== utcDay(date).getTime()) throw new ApiError(httpStatus.BAD_REQUEST, 'OvertimeDate must match the startTime calendar day');
+  return { start, end, date: utcDay(start), totalDuration: Number(((end - start) / 3600000).toFixed(6)) };
+};
+const ensureNoOverlap = async (employeeId, start, end, excludeId) => {
+  const query = { employeeId, status: { $in: ['pending', 'approved'] }, startTime: { $lt: end }, endTime: { $gt: start } };
+  if (excludeId) query._id = { $ne: excludeId };
+  if (await Overtime.exists(query)) throw new ApiError(httpStatus.CONFLICT, 'Overtime period overlaps an existing active request');
+};
+const createOvertime = async (body, actor) => {
+  const employee = await User.findById(body.employeeId).lean();
+  if (!employee) throw new ApiError(httpStatus.NOT_FOUND, 'Employee not found');
+  if (!isManagement(actor) && String(body.employeeId) !== String(actor._id)) throw new ApiError(httpStatus.FORBIDDEN, 'Employees may only create their own overtime');
+  const values = validateTimes(body);
+  await ensureNoOverlap(body.employeeId, values.start, values.end);
+  return Overtime.create({ ...body, OvertimeDate: values.date, totalDuration: values.totalDuration, createdBy: actor._id, statusHistory: [{ status: 'pending', changedBy: actor._id, changedAt: new Date(), reason: body.reason }] });
 };
 
 // Shared aggregation pipeline stages (after $match)
@@ -161,6 +181,12 @@ const updateOvertimeById = async (id, updateBody) => {
   if (!overtime) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Overtime request not found');
   }
+  if (overtime.status !== 'pending') throw new ApiError(httpStatus.BAD_REQUEST, 'Only pending overtime requests may be edited');
+  if (updateBody.startTime || updateBody.endTime || updateBody.OvertimeDate) {
+    const values = validateTimes({ ...overtime.toObject(), ...updateBody });
+    await ensureNoOverlap(overtime.employeeId, values.start, values.end, overtime._id);
+    Object.assign(updateBody, { OvertimeDate: values.date, totalDuration: values.totalDuration });
+  }
   Object.assign(overtime, updateBody);
   await overtime.save();
   return overtime;
@@ -169,12 +195,21 @@ const updateOvertimeById = async (id, updateBody) => {
 /**
  * Update overtime status
  */
-const updateOvertimeStatus = async (id, status) => {
+const updateOvertimeStatus = async (id, status, actor, metadata = {}) => {
   const overtime = await Overtime.findById(id);
   if (!overtime) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Overtime request not found');
   }
+  if (!isManagement(actor)) throw new ApiError(httpStatus.FORBIDDEN, 'Only management may approve, reject, or cancel overtime');
+  if (!((overtime.status === 'pending') || (overtime.status === 'approved' && status === 'cancelled'))) throw new ApiError(httpStatus.BAD_REQUEST, 'This overtime status cannot be changed');
+  if (status === 'rejected' && !String(metadata.rejectionReason || '').trim()) throw new ApiError(httpStatus.BAD_REQUEST, 'rejectionReason is required');
+  if (status === 'cancelled' && !String(metadata.cancellationReason || '').trim()) throw new ApiError(httpStatus.BAD_REQUEST, 'cancellationReason is required');
   overtime.status = status;
+  if (status === 'approved') { overtime.approvedBy = actor._id; overtime.approvedAt = new Date(); }
+  if (status === 'rejected') { overtime.rejectedBy = actor._id; overtime.rejectedAt = new Date(); overtime.rejectionReason = metadata.rejectionReason; }
+  if (status === 'cancelled') { overtime.cancelledBy = actor._id; overtime.cancelledAt = new Date(); overtime.cancellationReason = metadata.cancellationReason; }
+  if (!Array.isArray(overtime.statusHistory)) overtime.statusHistory = [];
+  overtime.statusHistory.push({ status, changedBy: actor._id, changedAt: new Date(), reason: status === 'rejected' ? metadata.rejectionReason : metadata.cancellationReason });
   await overtime.save();
   return overtime;
 };

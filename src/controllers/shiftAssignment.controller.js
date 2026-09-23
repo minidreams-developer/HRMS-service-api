@@ -1,0 +1,10 @@
+const httpStatus = require('http-status');
+const ApiError = require('../utils/ApiError');
+const catchAsync = require('../utils/catchAsync');
+const { shiftAssignmentService } = require('../services');
+const roles = new Set(['manager', 'hr_manager', 'subAdmin', 'admin']);
+const management = (req) => { if (!roles.has(req.user.role)) throw new ApiError(httpStatus.FORBIDDEN, 'Only management may assign shifts'); };
+const assign = catchAsync(async (req, res) => { management(req); res.status(201).send(await shiftAssignmentService.assignShift(req.body, req.user)); });
+const list = catchAsync(async (req, res) => { if (!roles.has(req.user.role) && String(req.user._id) !== req.params.employeeId) throw new ApiError(403, 'Forbidden'); res.send(await shiftAssignmentService.getEmployeeAssignments(req.params.employeeId, req.query)); });
+const get = catchAsync(async (req, res) => { const result = await shiftAssignmentService.getAssignmentById(req.params.assignmentId); if (!result) throw new ApiError(404, 'Shift assignment not found'); if (!roles.has(req.user.role) && String(result.employeeId) !== String(req.user._id)) throw new ApiError(403, 'Forbidden'); res.send(result); });
+module.exports = { assign, list, get };

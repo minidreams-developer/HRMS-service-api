@@ -15,8 +15,8 @@ describe('ATTENDANCE-04 edit attendance', () => {
   const at = (time) => `2026-04-02T${time}:00.000Z`;
 
   beforeEach(async () => {
-    shift = await Shift.create({ shiftName: 'Edit Shift', minWorkingHours: '8h', halfDayWorkingHours: '4h', breakManagement: { duration: 60 } });
-    alternateShift = await Shift.create({ shiftName: 'Short Shift', minWorkingHours: '6h', halfDayWorkingHours: '3h', breakManagement: { duration: 30 } });
+    shift = await Shift.create({ shiftName: 'Edit Shift', minWorkingHours: '8h', halfDayWorkingHours: '4h', breakManagement: { enabled: true, duration: 60 } });
+    alternateShift = await Shift.create({ shiftName: 'Short Shift', minWorkingHours: '6h', halfDayWorkingHours: '3h', breakManagement: { enabled: true, duration: 30 } });
     [employee, admin] = await User.create([
       { _id: new mongoose.Types.ObjectId(), name: 'Edit Employee', email: `edit-${Date.now()}@example.com`, role: 'employee', workInformation: { shiftId: shift._id } },
       { _id: new mongoose.Types.ObjectId(), name: 'Edit Admin', email: `edit-admin-${Date.now()}@example.com`, role: 'admin' },

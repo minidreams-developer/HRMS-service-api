@@ -4,11 +4,11 @@ const { objectId } = require('./custom.validation');
 const createOvertime = {
   body: Joi.object().keys({
     employeeId: Joi.string().custom(objectId).required(),
-    requestedDate: Joi.date(),
-    OvertimeDate: Joi.date(),
-    startTime: Joi.date(),
-    endTime: Joi.date(),
-    totalDuration: Joi.number(),
+    OvertimeDate: Joi.date().required(),
+    startTime: Joi.date().required(),
+    endTime: Joi.date().required(),
+    reason: Joi.string().trim().min(1).required(),
+    totalDuration: Joi.number().optional(),
   }),
 };
 
@@ -18,7 +18,7 @@ const getOvertime = {
     search:     Joi.string().optional(),
     // direct filters
     employeeId: Joi.string().custom(objectId).optional(),
-    status:     Joi.string().valid('pending', 'approved').optional(),
+    status:     Joi.string().valid('pending', 'approved', 'rejected', 'cancelled').optional(),
     // overtime date range
     fromDate:   Joi.date().iso().optional(),
     toDate:     Joi.date().iso().optional(),
@@ -56,7 +56,9 @@ const updateOvertime = {
       OvertimeDate: Joi.date(),
       startTime: Joi.date(),
       endTime: Joi.date(),
-      totalDuration: Joi.number(),
+      reason: Joi.string().trim().min(1),
+      rejectionReason: Joi.string().trim().allow(''),
+      cancellationReason: Joi.string().trim().allow(''),
     })
     .min(1),
 };
@@ -66,7 +68,13 @@ const updateOvertimeStatus = {
     overtimeId: Joi.string().custom(objectId).required(),
   }),
   body: Joi.object().keys({
-    status: Joi.string().valid('pending', 'approved').required(),
+    status: Joi.string().valid('approved', 'rejected', 'cancelled').required(),
+    rejectionReason: Joi.string().trim().allow('').optional(),
+    cancellationReason: Joi.string().trim().allow('').optional(),
+  }).custom((value, helpers) => {
+    if (value.status === 'rejected' && !String(value.rejectionReason || '').trim()) return helpers.error('any.invalid');
+    if (value.status === 'cancelled' && !String(value.cancellationReason || '').trim()) return helpers.error('any.invalid');
+    return value;
   }),
 };
 

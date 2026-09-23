@@ -672,3 +672,9 @@ stopped ────────► resumed ───────► processed �
 | `400` | `"year" must be at least 2000` | Invalid year |
 | `404` | `Employee not found` | Invalid employeeId |
 | `404` | `Payroll record not found` | No payroll exists for employee/month/year |
+
+### Leave reconciliation
+
+Payroll includes only approved leave requests. Paid/unpaid classification uses the matching yearly `LeaveBalance.isPaid` configuration; the exact `Unpaid Leave` type is the compatibility fallback when no balance exists. Unknown unconfigured leave types are reported as `unclassifiedLeaves` and are not silently classified.
+
+Leave dates are matched by overlap with the payroll period. Only dates inside the payroll month are counted, with active applicable holidays and employee shift week-offs excluded. Half-day leave counts as `0.5`. Payroll reads `LeaveBalance` only and never mutates balance usage or leave status.
