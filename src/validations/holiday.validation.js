@@ -32,6 +32,7 @@ const getHolidays = {
     page:         Joi.number().integer().min(1).optional(),
   }),
 };
+const getMyHolidays = { query: Joi.object().keys({ fromDate: Joi.date().iso(), toDate: Joi.date().iso(), year: Joi.number().integer().min(2000).max(3000), status: Joi.boolean() }) };
 
 const getHoliday = {
   params: Joi.object().keys({
@@ -85,6 +86,7 @@ const removePerson = {
 module.exports = {
   createHoliday,
   getHolidays,
+  getMyHolidays,
   getHoliday,
   updateHoliday,
   deleteHoliday,

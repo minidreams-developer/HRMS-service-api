@@ -11,6 +11,19 @@ const WORKING_DAYS_PER_MONTH = 26;
 // Overtime rate multiplier (1.5x of daily rate per hour, assuming 8h day)
 const OVERTIME_HOURLY_MULTIPLIER = 1.5;
 const WORK_HOURS_PER_DAY = 8;
+const allowedTransitions = {
+  draft: ['processed', 'stopped'],
+  processed: ['processed', 'paid', 'stopped'],
+  stopped: ['resumed'],
+  resumed: ['processed', 'stopped'],
+  paid: [],
+};
+const assertStatusTransition = (current, next) => {
+  if (current === next) return;
+  if (!allowedTransitions[current]?.includes(next)) {
+    throw new ApiError(httpStatus.BAD_REQUEST, `Cannot change payroll status from '${current}' to '${next}'`);
+  }
+};
 
 /**
  * Build the start and end Date objects for a given month/year (UTC).
@@ -136,6 +149,10 @@ const computePayrollForEmployee = async (employee, month, year, payrollOverride 
     specialAllowance = salaryDetails.specialAllowance || 0;
     otherAllowance = salaryDetails.otherFixedAllowance || 0;
   }
+  const configuredPfAmount = Number(salaryDetails?.pfAmount) || 0;
+  const configuredEsiAmount = Number(salaryDetails?.esiAmount) || 0;
+  const appliedPfAmount = payrollOverride ? (Number(payrollOverride.pfAmount) || 0) : configuredPfAmount;
+  const appliedEsiAmount = payrollOverride ? (Number(payrollOverride.esiAmount) || 0) : configuredEsiAmount;
 
   const dailyRate = monthlyCTC > 0
     ? parseFloat((monthlyCTC / WORKING_DAYS_PER_MONTH).toFixed(2))
@@ -161,15 +178,18 @@ const computePayrollForEmployee = async (employee, month, year, payrollOverride 
   const penalties = payrollOverride?.penalties || 0;
   const loanAndAdvance = payrollOverride?.loanAndAdvance || 0;
   const otherDeductions = payrollOverride?.otherDeductions || 0;
+  const deductions = payrollOverride?.deductions || 0;
 
   // Gross Earnings = earnedWages + overtimeAmount + extras + otherWages
   const grossEarnings = parseFloat(
     (earnedWages + overtimeAmount + extras + otherWages).toFixed(2)
   );
 
-  // Take Home = grossEarnings − penalties − loanAndAdvance − otherDeductions
+  const totalDeductions = parseFloat((deductions + penalties + loanAndAdvance + otherDeductions + appliedPfAmount + appliedEsiAmount).toFixed(2));
+
+  // Take Home = grossEarnings − all deductions, including PF and ESI once.
   const takeHome = parseFloat(
-    (grossEarnings - penalties - loanAndAdvance - otherDeductions).toFixed(2)
+    (grossEarnings - totalDeductions).toFixed(2)
   );
 
   return {
@@ -194,7 +214,11 @@ const computePayrollForEmployee = async (employee, month, year, payrollOverride 
     penalties,
     loanAndAdvance,
     otherDeductions,
+    deductions,
+    totalDeductions,
     takeHome,
+    pfAmount: appliedPfAmount,
+    esiAmount: appliedEsiAmount,
   };
 };
 
@@ -236,6 +260,7 @@ const getPayrollList = async (query, options) => {
   if (query.branchId && mongoose.Types.ObjectId.isValid(query.branchId)) {
     userMatch['workInformation.branch'] = new mongoose.Types.ObjectId(query.branchId);
   }
+  if (query.role && ['employee', 'staff'].includes(query.role)) userMatch.role = query.role;
 
   // ── Fetch employees with their salary details ─────────────────────────────
   const totalResults = await User.countDocuments(userMatch);
@@ -282,6 +307,8 @@ const getPayrollList = async (query, options) => {
 
       const override = overrideMap[String(emp._id)] || null;
       const computed = await computePayrollForEmployee(emp, month, year, override);
+      const pfAmount = override && override.pfAmount !== undefined ? override.pfAmount : 0;
+      const esiAmount = override && override.esiAmount !== undefined ? override.esiAmount : 0;
 
       return {
         _id: emp._id,
@@ -292,10 +319,23 @@ const getPayrollList = async (query, options) => {
         profilePic: emp.profilePic || null,
         payrollId: override?._id || null,
         status: override?.status || 'draft',
+        pfAmount,
+        esiAmount,
         ...computed,
+        pfAmount,
+        esiAmount,
       };
     })
   );
+
+  const payrollRows = await Payroll.find({
+    employeeId: { $in: await User.find(userMatch).distinct('_id') },
+    month,
+    year,
+    ...(query.status ? { status: query.status } : {}),
+  }).select('pfAmount esiAmount').lean();
+  const totalPfAmount = payrollRows.reduce((sum, row) => sum + (Number(row.pfAmount) || 0), 0);
+  const totalEsiAmount = payrollRows.reduce((sum, row) => sum + (Number(row.esiAmount) || 0), 0);
 
   return {
     results,
@@ -305,6 +345,9 @@ const getPayrollList = async (query, options) => {
     totalResults: query.status ? results.length : totalResults,
     month,
     year,
+    summary: { totalPfAmount, totalEsiAmount },
+    totalPfAmount,
+    totalEsiAmount,
   };
 };
 
@@ -317,7 +360,7 @@ const getPayrollList = async (query, options) => {
  */
 const getEmployeePayroll = async (employeeId, month, year) => {
   const emp = await User.findById(employeeId)
-    .select('name employeeId workInformation profilePic')
+    .select('name employeeId workInformation profilePic isDeleted')
     .populate('workInformation.SalaryDetails')
     .lean();
 
@@ -327,6 +370,8 @@ const getEmployeePayroll = async (employeeId, month, year) => {
 
   const override = await Payroll.findOne({ employeeId, month, year }).lean();
   const computed = await computePayrollForEmployee(emp, month, year, override);
+  const pfAmount = override && override.pfAmount !== undefined ? override.pfAmount : 0;
+  const esiAmount = override && override.esiAmount !== undefined ? override.esiAmount : 0;
 
   // Department name resolution
   let departmentName = null;
@@ -353,6 +398,8 @@ const getEmployeePayroll = async (employeeId, month, year) => {
     month,
     year,
     ...computed,
+    pfAmount,
+    esiAmount,
   };
 };
 
@@ -366,13 +413,13 @@ const getEmployeePayroll = async (employeeId, month, year) => {
  */
 const upsertPayroll = async (employeeId, month, year, body) => {
   const emp = await User.findById(employeeId).lean();
-  if (!emp) {
+  if (!emp || emp.isDeleted === true) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Employee not found');
   }
 
   const allowedFields = [
     'extras', 'penalties', 'loanAndAdvance', 'otherDeductions', 'otherWages',
-    'totalSalary', 'overtimePayment', 'additionPayment', 'deductions', 'totalPayableAmount',
+    'totalSalary', 'overtimePayment', 'additionPayment', 'deductions', 'totalPayableAmount', 'pfAmount', 'esiAmount',
     'status', 'remarks'
   ];
   const update = {};
@@ -380,11 +427,14 @@ const upsertPayroll = async (employeeId, month, year, body) => {
     if (body[field] !== undefined) update[field] = body[field];
   }
 
-  const payroll = await Payroll.findOneAndUpdate(
-    { employeeId, month, year },
-    { $set: update },
-    { new: true, upsert: true, runValidators: true }
-  );
+  const existing = await Payroll.findOne({ employeeId, month, year });
+  if (existing?.status === 'paid') throw new ApiError(httpStatus.CONFLICT, 'Paid payroll is immutable');
+  if (existing && body.status) assertStatusTransition(existing.status, body.status);
+  if (existing) {
+    if (body.status === 'paid') { update.paidAt = new Date(); update.paidBy = body.updatedBy; }
+    update.updatedBy = body.updatedBy;
+  }
+  const payroll = await Payroll.findOneAndUpdate({ employeeId, month, year }, { $set: update }, { new: true, upsert: true, runValidators: true });
 
   return payroll;
 };
@@ -397,17 +447,18 @@ const upsertPayroll = async (employeeId, month, year, body) => {
  * Compute and lock payroll for an employee for the given month/year.
  * Saves the computed snapshot to the Payroll record and sets status → processed.
  */
-const processPayroll = async (employeeId, month, year) => {
+const processPayroll = async (employeeId, month, year, actorId) => {
   const emp = await User.findById(employeeId)
-    .select('name employeeId workInformation profilePic')
+    .select('name employeeId workInformation profilePic isDeleted')
     .populate('workInformation.SalaryDetails')
     .lean();
 
-  if (!emp) {
+  if (!emp || emp.isDeleted === true) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Employee not found');
   }
 
   const override = await Payroll.findOne({ employeeId, month, year }).lean();
+  if (override?.status === 'paid') throw new ApiError(httpStatus.CONFLICT, 'Paid payroll cannot be reprocessed');
   const computed = await computePayrollForEmployee(emp, month, year, override);
 
   const payroll = await Payroll.findOneAndUpdate(
@@ -415,6 +466,11 @@ const processPayroll = async (employeeId, month, year) => {
     {
       $set: {
         status: 'processed',
+        processedBy: actorId,
+        processedAt: new Date(),
+        updatedBy: actorId,
+        pfAmount: computed.pfAmount,
+        esiAmount: computed.esiAmount,
         snapshot: {
           fullDays: computed.fullDays,
           halfDays: computed.halfDays,
@@ -445,6 +501,7 @@ const deletePayrollById = async (payrollId) => {
   if (!payroll) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Payroll record not found');
   }
+  if (payroll.status !== 'draft') throw new ApiError(httpStatus.CONFLICT, 'Only draft payroll can be deleted');
   await payroll.deleteOne();
   return payroll;
 };
@@ -459,11 +516,13 @@ const deletePayrollById = async (payrollId) => {
  */
 const stopPayroll = async (employeeId, stopData) => {
   const emp = await User.findById(employeeId).lean();
-  if (!emp) {
+  if (!emp || emp.isDeleted === true) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Employee not found');
   }
 
   const { month, year, stopType, reason, effectiveFrom, resumeOn, impactMonth, stopRemarks } = stopData;
+  const existing = await Payroll.findOne({ employeeId, month, year });
+  if (existing?.status === 'paid') throw new ApiError(httpStatus.CONFLICT, 'Paid payroll cannot be stopped');
 
   // Validate required fields
   if (!stopType || !reason || !effectiveFrom || !impactMonth) {
@@ -517,6 +576,7 @@ const resumePayroll = async (employeeId, month, year, resumeRemarks = '') => {
   if (payroll.status !== 'stopped') {
     throw new ApiError(httpStatus.BAD_REQUEST, `Cannot resume payroll. Current status is '${payroll.status}', expected 'stopped'`);
   }
+  if (payroll.status === 'paid') throw new ApiError(httpStatus.CONFLICT, 'Paid payroll cannot be resumed');
 
   // Update the payroll to resumed status
   payroll.status = 'resumed';
@@ -540,10 +600,10 @@ const resumePayroll = async (employeeId, month, year, resumeRemarks = '') => {
 /**
  * Get all stopped payrolls with optional filters
  */
-const createPayroll = async (payrollBody) => {
+const createPayroll = async (payrollBody, actorId) => {
   // Check if employee exists
   const employee = await User.findById(payrollBody.employeeId);
-  if (!employee) {
+  if (!employee || employee.isDeleted === true) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Employee not found');
   }
 
@@ -557,7 +617,21 @@ const createPayroll = async (payrollBody) => {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Payroll already exists for this employee and period');
   }
 
-  return Payroll.create(payrollBody);
+  const body = { ...payrollBody };
+  if (body.status === 'paid') { body.paidAt = new Date(); body.paidBy = actorId; }
+  return Payroll.create(body);
+};
+
+const updatePayrollStatus = async (payrollId, status, actorId) => {
+  const payroll = await Payroll.findById(payrollId);
+  if (!payroll) throw new ApiError(httpStatus.NOT_FOUND, 'Payroll record not found');
+  assertStatusTransition(payroll.status, status);
+  if (payroll.status === 'paid') throw new ApiError(httpStatus.CONFLICT, 'Paid payroll is immutable');
+  payroll.status = status;
+  payroll.updatedBy = actorId;
+  if (status === 'paid') { payroll.paidAt = new Date(); payroll.paidBy = actorId; }
+  await payroll.save();
+  return payroll;
 };
 
 const getStoppedPayrolls = async (query, options) => {
@@ -602,4 +676,6 @@ module.exports = {
   stopPayroll,
   resumePayroll,
   getStoppedPayrolls,
+  updatePayrollStatus,
+  assertStatusTransition,
 };

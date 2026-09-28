@@ -12,12 +12,12 @@ const canReadEmployeeAttendance = (req) => {
 };
 
 const createAttendance = catchAsync(async (req, res) => {
-  const attendance = await attendanceService.createAttendance(req.body);
+  const attendance = await attendanceService.createAttendance(req.body, req.user._id || req.user.id);
   res.status(httpStatus.CREATED).send(attendance);
 });
 
 const getAttendances = catchAsync(async (req, res) => {
-  const filter  = pick(req.query, ['search', 'employeeId', 'shiftId', 'date', 'attendanceStatus', 'timingStatus', 'attendanceCategory', 'fromDate', 'toDate']);
+  const filter  = pick(req.query, ['search', 'employeeId', 'role', 'department', 'departmentId', 'shift', 'shiftId', 'date', 'attendanceStatus', 'timingStatus', 'attendanceCategory', 'fromDate', 'toDate']);
   const options = pick(req.query, ['sortBy', 'limit', 'page']);
   const result  = await attendanceService.queryAttendances(filter, options);
   res.send(result);

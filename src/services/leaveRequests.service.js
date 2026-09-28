@@ -1,6 +1,9 @@
 const httpStatus = require('http-status');
 const mongoose = require('mongoose');
-const { LeaveRequests, LeaveBalance, User, Shift, Holiday } = require('../models');
+const { LeaveRequests, LeaveBalance, User, Shift, Holiday, DayOff } = require('../models');
+const { getApplicableHolidays } = require('./holiday.service');
+const { getEmployeeShiftForDate } = require('./shiftAssignment.service');
+const { getEffectiveShiftForDate } = require('./roster.service');
 const ApiError = require('../utils/ApiError');
 
 const utcDay = (value) => {
@@ -43,15 +46,20 @@ const getEmployeeContext = async (employeeId) => {
 };
 
 const calculateLeaveDays = async (employeeId, start, end, leaveDuration = 'fullDay') => {
-  const { shift } = await getEmployeeContext(employeeId);
   const dates = dateRange(start, end);
-  const holidays = await Holiday.find({ status: true, date: { $gte: start, $lte: endOfDay(end) }, people: employeeId }).lean();
+  const [holidays, dayOffs] = await Promise.all([
+    getApplicableHolidays(employeeId, start, end),
+    DayOff.find({ employeeId, status: true, date: { $gte: start, $lte: endOfDay(end) } }).lean(),
+  ]);
   const holidayKeys = new Set(holidays.map((holiday) => key(holiday.date)));
-  const weekOff = new Set((shift?.weekOff || []).map((day) => String(day).toLowerCase()));
-  const workingDates = dates.filter((date) => {
+  const dayOffKeys = new Set(dayOffs.map((record) => key(record.date)));
+  const workingDates = [];
+  for (const date of dates) {
     const weekday = date.toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' }).toLowerCase();
-    return !holidayKeys.has(key(date)) && !weekOff.has(weekday);
-  });
+    const shift = await getEffectiveShiftForDate(employeeId, date);
+    const weekOff = (shift?.weekOff || []).map((value) => String(value).toLowerCase()).includes(weekday);
+    if (!holidayKeys.has(key(date)) && !dayOffKeys.has(key(date)) && !weekOff) workingDates.push(date);
+  }
   if (leaveDuration === 'halfDay') return workingDates.length ? 0.5 : 0;
   return workingDates.length;
 };

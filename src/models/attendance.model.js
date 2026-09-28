@@ -53,6 +53,9 @@ const attendanceSchema = new mongoose.Schema({
   lastEditedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   lastEditedAt: { type: Date },
   editReason: { type: String, trim: true },
+  createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  creationSource: { type: String, enum: ['manual'], default: undefined },
+  createdReason: { type: String, trim: true },
   shiftSnapshot: {
     shiftId: mongoose.Schema.Types.ObjectId,
     shiftName: String,

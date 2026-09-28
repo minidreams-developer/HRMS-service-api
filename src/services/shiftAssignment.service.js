@@ -35,11 +35,25 @@ const getEmployeeAssignments = async (employeeId, options = {}) => {
 };
 
 const getEmployeeShiftForDate = async (employeeId, date) => {
-  const target = day(date); const targetEnd = new Date(target.getTime() + 86399999);
-  const assignment = await ShiftAssignment.findOne({ employeeId, effectiveFrom: { $lte: targetEnd }, $or: [{ effectiveTo: null }, { effectiveTo: { $exists: false } }, { effectiveTo: { $gte: target } }] }).populate('shiftId').sort({ effectiveFrom: -1 }).lean();
-  if (assignment?.shiftId) return assignment.shiftId;
-  const employee = await User.findById(employeeId).populate('workInformation.shiftId').lean();
-  return employee?.workInformation?.shiftId || null;
+  const target = day(date);
+  let normalizedEmployeeId;
+  try { normalizedEmployeeId = new mongoose.Types.ObjectId(String(employeeId)); } catch (error) { return null; }
+  const assignment = await ShiftAssignment.findOne({
+    employeeId: normalizedEmployeeId,
+    effectiveFrom: { $lte: target },
+    $or: [
+      { effectiveTo: null },
+      { effectiveTo: { $exists: false } },
+      { effectiveTo: { $gte: target } },
+    ],
+  }).sort({ effectiveFrom: -1, _id: -1 }).lean();
+  if (assignment) {
+    const shift = await Shift.findById(assignment.shiftId).lean();
+    if (shift) return shift;
+  }
+  const employee = await User.findById(normalizedEmployeeId).lean();
+  const legacyShiftId = employee?.workInformation?.shiftId;
+  return legacyShiftId ? Shift.findById(legacyShiftId).lean() : null;
 };
 
 module.exports = { assignShift, getAssignmentById, getEmployeeAssignments, getEmployeeShiftForDate };

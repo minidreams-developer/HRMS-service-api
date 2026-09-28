@@ -1,8 +1,10 @@
 const httpStatus = require('http-status');
 const mongoose = require('mongoose');
-const { Attendance, Holiday, LeaveRequests, Overtime, User, Shift } = require('../models');
-const { detectOverlappingOvertime } = require('./overtimeOverlap.service');
+const { Attendance, Holiday, DayOff, LeaveRequests, Overtime, User, Shift } = require('../models');
+const { getApplicableHolidays } = require('./holiday.service');
 const { getEmployeeShiftForDate } = require('./shiftAssignment.service');
+const { getEffectiveShiftForDate } = require('./roster.service');
+const { detectOverlappingOvertime } = require('./overtimeOverlap.service');
 const ApiError = require('../utils/ApiError');
 
 const utcDay = (value) => {
@@ -24,7 +26,7 @@ const getShiftForAttendance = async (shiftId) => {
 const deriveAttendance = async (body, existing = null, options = {}) => {
   const record = { ...(existing || {}), ...body };
   if (!record.shiftId && record.employeeId && record.date) {
-    const resolved = await getEmployeeShiftForDate(record.employeeId, record.date);
+    const resolved = await getEffectiveShiftForDate(record.employeeId, record.date);
     if (resolved) record.shiftId = resolved._id;
   }
   const explicitlyAbsent = body.attendanceCategory === 'absent' && !record.loginTime && !record.logoutTime;
@@ -101,9 +103,19 @@ const populateAttendance = async (docs) => {
 /**
  * Create an attendance record
  */
-const createAttendance = async (body) => {
+const createAttendance = async (body, actorId) => {
+  const employee = await User.findById(body.employeeId).lean();
+  if (!employee || employee.isDeleted === true) throw new ApiError(httpStatus.NOT_FOUND, 'Employee not found');
+  if (body.shiftId) {
+    const explicitShift = await Shift.findById(body.shiftId).lean();
+    if (!explicitShift) throw new ApiError(httpStatus.NOT_FOUND, 'Shift not found');
+    if (explicitShift.isShiftActive === false) throw new ApiError(httpStatus.BAD_REQUEST, 'Inactive Shift cannot be selected for new Attendance');
+  }
   const attendance = await deriveAttendance(body);
   attendance.attendanceDay = utcDay(attendance.date);
+  attendance.createdBy = actorId;
+  attendance.creationSource = 'manual';
+  attendance.createdReason = body.createdReason;
   const duplicate = await Attendance.findOne({
     employeeId: attendance.employeeId,
     date: { $gte: attendance.attendanceDay, $lt: new Date(attendance.attendanceDay.getTime() + 86400000) },
@@ -131,8 +143,15 @@ const createAttendance = async (body) => {
  *   toDate           — attendance date <= toDate
  */
 const queryAttendances = async (filter, options) => {
-  const { User } = require('../models');
+  const { User, Department, Shift } = require('../models');
   const mongoFilter = {};
+
+  const intersectEmployeeIds = async (ids) => {
+    const current = mongoFilter.employeeId?.$in;
+    const allowed = new Set(ids.map(String));
+    if (current) mongoFilter.employeeId.$in = current.filter((item) => allowed.has(String(item)));
+    else mongoFilter.employeeId = { $in: ids };
+  };
 
   // Search — resolve user IDs first, then scope attendance records
   if (filter.search) {
@@ -142,17 +161,43 @@ const queryAttendances = async (filter, options) => {
       { _id: 1 }
     ).lean();
     const userIds = matchedUsers.map((u) => u._id);
-    mongoFilter.employeeId = { $in: userIds };
+    await intersectEmployeeIds(userIds);
+  }
+
+  // Role belongs to User, so resolve matching users before querying Attendance.
+  if (filter.role) {
+    const roleUsers = await User.find({ role: filter.role }, { _id: 1 }).lean();
+    await intersectEmployeeIds(roleUsers.map((user) => user._id));
+  }
+
+  if (filter.departmentId || filter.department) {
+    let departmentIds = [];
+    if (filter.departmentId) departmentIds.push(new mongoose.Types.ObjectId(filter.departmentId));
+    if (filter.department) {
+      const departmentRegex = new RegExp(`^${String(filter.department).replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&')}$`, 'i');
+      departmentIds = departmentIds.concat(await Department.find({ departmentName: departmentRegex }, { _id: 1 }).lean().then((rows) => rows.map((row) => row._id)));
+    }
+    const departmentUsers = await User.find({ 'workInformation.department': { $in: departmentIds } }, { _id: 1 }).lean();
+    await intersectEmployeeIds(departmentUsers.map((user) => user._id));
   }
 
   // Direct employeeId filter (overrides search scope if both given)
   if (filter.employeeId && isObjectId(filter.employeeId)) {
-    mongoFilter.employeeId = new mongoose.Types.ObjectId(filter.employeeId);
+    await intersectEmployeeIds([new mongoose.Types.ObjectId(filter.employeeId)]);
   }
 
-  // Shift filter
-  if (filter.shiftId && isObjectId(filter.shiftId)) {
-    mongoFilter.shiftId = new mongoose.Types.ObjectId(filter.shiftId);
+  // Shift filter. Attendance.shiftId/shiftSnapshot are historical sources;
+  // do not use the employee's current shift for this attendance list.
+  if (filter.shiftId || filter.shift) {
+    let shiftIds = [];
+    if (filter.shiftId) shiftIds.push(new mongoose.Types.ObjectId(filter.shiftId));
+    if (filter.shift) {
+      const shiftRegex = new RegExp(`^${String(filter.shift).replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&')}$`, 'i');
+      shiftIds = shiftIds.concat(await Shift.find({ shiftName: shiftRegex }, { _id: 1 }).lean().then((rows) => rows.map((row) => row._id)));
+    }
+    const matchingAttendance = await Attendance.find({ $or: [{ shiftId: { $in: shiftIds } }, { 'shiftSnapshot.shiftId': { $in: shiftIds } }] }, { employeeId: 1 }).lean();
+    await intersectEmployeeIds(matchingAttendance.map((record) => record.employeeId));
+    mongoFilter.$and = (mongoFilter.$and || []).concat({ $or: [{ shiftId: { $in: shiftIds } }, { 'shiftSnapshot.shiftId': { $in: shiftIds } }] });
   }
 
   // Attendance status filter
@@ -289,7 +334,7 @@ const getEmployeeAttendanceSummary = async (employeeId, fromDate, toDate) => {
   const employee = await User.findById(employeeObjectId).lean();
   if (!employee) throw new ApiError(httpStatus.NOT_FOUND, 'Employee not found');
 
-  const [attendanceRecords, leaveRecords, holidayRecords, overtimeRecords] = await Promise.all([
+  const [attendanceRecords, leaveRecords, holidayRecords, dayOffRecords, overtimeRecords] = await Promise.all([
     Attendance.find({ employeeId: employeeObjectId, date: { $gte: from, $lte: rangeEnd(to) } }).sort({ date: 1, createdAt: 1 }).lean(),
     LeaveRequests.find({
       employeeId: employeeObjectId,
@@ -299,11 +344,8 @@ const getEmployeeAttendanceSummary = async (employeeId, fromDate, toDate) => {
         { startDate: { $lte: rangeEnd(to) }, endDate: { $gte: from } },
       ],
     }).lean(),
-    Holiday.find({
-      status: true,
-      date: { $gte: from, $lte: rangeEnd(to) },
-      people: employeeObjectId,
-    }).lean(),
+    getApplicableHolidays(employeeObjectId, from, to),
+    DayOff.find({ employeeId: employeeObjectId, status: true, date: { $gte: from, $lte: rangeEnd(to) } }).lean(),
     Overtime.find({
       employeeId: employeeObjectId,
       status: 'approved',
@@ -317,9 +359,14 @@ const getEmployeeAttendanceSummary = async (employeeId, fromDate, toDate) => {
   const shiftId = employee.workInformation?.shiftId;
   const shift = shiftId && isObjectId(shiftId) ? await Shift.findById(shiftId).lean() : null;
   const weekOff = new Set((shift?.weekOff || []).map((day) => String(day).toLowerCase()));
-  const dayOffDays = new Set(days
-    .filter((date) => weekOff.has(date.toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' }).toLowerCase()))
-    .map(dayKey));
+  const assignedDayOffDays = new Set(dayOffRecords.map((record) => dayKey(record.date)));
+  const shiftByDate = new Map();
+  for (const date of days) shiftByDate.set(dayKey(date), await getEmployeeShiftForDate(employeeObjectId, date));
+  const shiftWeekOffDays = new Set(days.filter((date) => {
+    const shiftForDate = shiftByDate.get(dayKey(date));
+    return (shiftForDate?.weekOff || []).map((value) => String(value).toLowerCase()).includes(date.toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' }).toLowerCase());
+  }).map(dayKey));
+  const dayOffDays = new Set([...assignedDayOffDays, ...shiftWeekOffDays]);
 
   const leaveDays = new Set();
   for (const leave of leaveRecords) {
@@ -361,6 +408,7 @@ const getEmployeeAttendanceSummary = async (employeeId, fromDate, toDate) => {
     overtimeDays,
     overtimeHours,
     dayOff: dayOffCount,
+    dayOffBreakdown: { assignedDayOff: [...assignedDayOffDays].filter((key) => !holidayDays.has(key)).length, shiftWeekOff: [...shiftWeekOffDays].filter((key) => !holidayDays.has(key)).length },
     holidays: holidayCount,
     leaves: leaveDays.size,
     duplicateAttendanceDates,
@@ -369,7 +417,7 @@ const getEmployeeAttendanceSummary = async (employeeId, fromDate, toDate) => {
   };
 };
 
-const attendanceListFields = 'employeeId date attendanceCategory timingStatus attendanceStatus loginTime logoutTime totalWorkedHours shiftId remarks';
+const attendanceListFields = 'employeeId date attendanceCategory timingStatus attendanceStatus loginTime logoutTime totalWorkedHours shiftId remarks isManualOverride overrideReason createdBy creationSource createdReason lastEditedBy lastEditedAt editReason';
 
 const getEmployeeAttendance = async (employeeId, filter = {}, options = {}) => {
   const employeeObjectId = isObjectId(employeeId) ? new mongoose.Types.ObjectId(employeeId) : employeeId;
@@ -386,6 +434,8 @@ const getEmployeeAttendance = async (employeeId, filter = {}, options = {}) => {
     loginTime: record.loginTime,
     logoutTime: record.logoutTime,
     totalWorkedHours: record.totalWorkedHours,
+    isManualOverride: record.isManualOverride,
+    overrideReason: record.overrideReason,
     shift: record.shiftId || null,
     remarks: record.remarks,
   }));
@@ -398,15 +448,16 @@ const getEmployeeCalendar = async (employeeId, fromDate, toDate) => {
   const employeeObjectId = isObjectId(employeeId) ? new mongoose.Types.ObjectId(employeeId) : employeeId;
   const employee = await User.findById(employeeObjectId).lean();
   if (!employee) throw new ApiError(httpStatus.NOT_FOUND, 'Employee not found');
-  const [attendance, leaves, holidays, overtime] = await Promise.all([
+  const [attendance, leaves, holidays, dayOffRecords, overtime] = await Promise.all([
     Attendance.find({ employeeId: employeeObjectId, date: { $gte: from, $lte: rangeEnd(to) } }).select(attendanceListFields).sort({ date: 1, createdAt: 1 }).lean(),
     LeaveRequests.find({ employeeId: employeeObjectId, status: 'approved', $or: [{ singleDate: { $gte: from, $lte: rangeEnd(to) } }, { startDate: { $lte: rangeEnd(to) }, endDate: { $gte: from } }] }).lean(),
-    Holiday.find({ status: true, date: { $gte: from, $lte: rangeEnd(to) }, people: employeeObjectId }).lean(),
+    getApplicableHolidays(employeeObjectId, from, to),
+    DayOff.find({ employeeId: employeeObjectId, status: true, date: { $gte: from, $lte: rangeEnd(to) } }).lean(),
     Overtime.find({ employeeId: employeeObjectId, status: 'approved', OvertimeDate: { $gte: from, $lte: rangeEnd(to) } }).lean(),
   ]);
-  const shiftId = employee.workInformation?.shiftId;
-  const shift = shiftId && isObjectId(shiftId) ? await Shift.findById(shiftId).lean() : null;
-  const weekOff = new Set((shift?.weekOff || []).map((day) => String(day).toLowerCase()));
+  const shiftByDate = new Map();
+  for (const date of enumerateDays(from, to)) shiftByDate.set(dayKey(date), await getEmployeeShiftForDate(employeeObjectId, date));
+  const assignedDayOffDays = new Set(dayOffRecords.map((record) => dayKey(record.date)));
   const byDate = new Map(attendance.map((record) => [dayKey(record.date), record]));
   const duplicateCounts = new Map(duplicateDateInfo(attendance).map((item) => [item.date, item.count]));
   const leaveDays = new Set();
@@ -420,10 +471,12 @@ const getEmployeeCalendar = async (employeeId, fromDate, toDate) => {
   return enumerateDays(from, to).map((date) => {
     const key = dayKey(date); const record = byDate.get(key);
     const holiday = holidayDays.get(key);
-    const dayOff = weekOff.has(date.toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' }).toLowerCase());
-    const category = duplicateCounts.has(key) ? 'duplicate' : holiday ? 'holiday' : dayOff ? 'dayOff' : leaveDays.has(key) ? 'leave' : record?.attendanceCategory;
+    const shift = shiftByDate.get(key);
+    const weekOff = (shift?.weekOff || []).map((value) => String(value).toLowerCase()).includes(date.toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' }).toLowerCase());
+    const dayOff = assignedDayOffDays.has(key) || weekOff;
+    const category = duplicateCounts.has(key) ? 'duplicate' : holiday ? 'holiday' : assignedDayOffDays.has(key) ? 'dayOff' : dayOff ? 'dayOff' : leaveDays.has(key) ? 'leave' : record?.attendanceCategory;
     const ot = overtimeByDay.get(key);
-    return { date: key, category, attendanceCategory: record?.attendanceCategory, timingStatus: record?.timingStatus || record?.attendanceStatus, totalWorkedHours: record?.totalWorkedHours || 0, approvedOvertime: ot ? { hours: ot.totalDuration || 0, id: ot.id || ot._id } : null, overtimeConflict: overtimeDiagnostics.overlappingDates.includes(key), attendanceId: record?.id || record?._id, duplicateAttendanceCount: duplicateCounts.get(key) || 0 };
+    return { date: key, category, dayOffType: category === 'dayOff' ? (assignedDayOffDays.has(key) ? 'assigned' : 'weekOff') : undefined, attendanceCategory: record?.attendanceCategory, timingStatus: record?.timingStatus || record?.attendanceStatus, totalWorkedHours: record?.totalWorkedHours || 0, approvedOvertime: ot ? { hours: ot.totalDuration || 0, id: ot.id || ot._id } : null, overtimeConflict: overtimeDiagnostics.overlappingDates.includes(key), attendanceId: record?.id || record?._id, duplicateAttendanceCount: duplicateCounts.get(key) || 0 };
   });
 };
 

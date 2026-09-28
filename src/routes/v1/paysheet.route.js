@@ -1,4 +1,5 @@
 const express = require('express');
+const auth = require('../../middlewares/auth');
 const validate = require('../../middlewares/validate');
 const paysheetValidation = require('../../validations/paysheet.validation');
 const { paysheetController } = require('../../controllers');
@@ -25,39 +26,39 @@ const router = express.Router();
 // Dashboard routes
 router
   .route('/dashboard')
-  .get(validate(paysheetValidation.getDashboard), paysheetController.getDashboard);
+  .get(auth('manageAttendance'), validate(paysheetValidation.getDashboard), paysheetController.getDashboard);
 
 router
   .route('/quick-stats')
-  .get(validate(paysheetValidation.getQuickStats), paysheetController.getQuickStats);
+  .get(auth('manageAttendance'), validate(paysheetValidation.getQuickStats), paysheetController.getQuickStats);
 
 router
   .route('/payroll-overview')
-  .get(validate(paysheetValidation.getPayrollOverview), paysheetController.getPayrollOverview);
+  .get(auth('manageAttendance'), validate(paysheetValidation.getPayrollOverview), paysheetController.getPayrollOverview);
 
 router
   .route('/payroll-breakdown')
-  .get(validate(paysheetValidation.getPayrollBreakdown), paysheetController.getPayrollBreakdown);
+  .get(auth('manageAttendance'), validate(paysheetValidation.getPayrollBreakdown), paysheetController.getPayrollBreakdown);
 
 router
   .route('/generate')
-  .post(validate(paysheetValidation.generatePaysheet), paysheetController.generatePaysheet);
+  .post(auth('manageAttendance'), validate(paysheetValidation.generatePaysheet), paysheetController.generatePaysheet);
 
 router
   .route('/refresh')
-  .post(validate(paysheetValidation.refreshPaysheet), paysheetController.refreshPaysheet);
+  .post(auth('manageAttendance'), validate(paysheetValidation.refreshPaysheet), paysheetController.refreshPaysheet);
 
 // Payroll list table routes
 router
   .route('/list')
-  .get(validate(paysheetValidation.getPayrollList), paysheetController.getPayrollList);
+  .get(auth('manageAttendance'), validate(paysheetValidation.getPayrollList), paysheetController.getPayrollList);
 
 router
   .route('/:payrollId/detail')
-  .get(validate(paysheetValidation.getPayrollDetail), paysheetController.getPayrollDetail);
+  .get(auth('manageAttendance'), validate(paysheetValidation.getPayrollDetail), paysheetController.getPayrollDetail);
 
 router
   .route('/:payrollId/status')
-  .patch(validate(paysheetValidation.updatePayrollStatus), paysheetController.updatePayrollStatus);
+  .patch(auth('manageAttendance'), validate(paysheetValidation.updatePayrollStatus), paysheetController.updatePayrollStatus);
 
 module.exports = router;

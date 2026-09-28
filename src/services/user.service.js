@@ -238,6 +238,7 @@ const populateWorkInfo = async (docs) => {
     { path: 'workInformation.team',       model: 'Team',       select: 'teamName teamCode teamDescription' },
     { path: 'workInformation.branch',     model: 'Branch' },
     { path: 'workInformation.shiftId',    model: 'Shift' },
+    { path: 'workInformation.contractAgent', model: 'User', select: 'name employeeId email role' },
     { path: 'workInformation.reportingPerson', model: 'User', select: 'name employeeId email' },
     { path: 'workInformation.jobItems',   model: 'Contractor' },
   ];
@@ -405,10 +406,14 @@ const queryUsers = async (filter, options, advancedFilters = {}) => {
       if (row._id) countMap[String(row._id)] = row.count;
     }
 
-    // Attach memberCount to each agent doc
-    for (const agent of result.results) {
-      agent.memberCount = countMap[String(agent._id)] || 0;
-    }
+    // Convert to plain objects before attaching the computed field. Mongoose's
+    // toJSON transform only serializes schema paths, so assigning a dynamic
+    // property directly to a document would omit memberCount from the response.
+    result.results = result.results.map((agent) => {
+      const plainAgent = typeof agent.toObject === 'function' ? agent.toObject() : agent;
+      plainAgent.memberCount = countMap[String(agent._id)] || 0;
+      return plainAgent;
+    });
   }
 
   return result;

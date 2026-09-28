@@ -31,6 +31,16 @@ const salaryDetailsSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    pfAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    esiAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
   },
   { timestamps: true },
 );

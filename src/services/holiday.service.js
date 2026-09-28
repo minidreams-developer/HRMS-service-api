@@ -2,13 +2,43 @@ const httpStatus = require('http-status');
 const { Holiday, User } = require('../models');
 const ApiError = require('../utils/ApiError');
 
+const utcDay = (value) => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) throw new ApiError(httpStatus.BAD_REQUEST, 'Invalid holiday date');
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+};
+
+const getApplicableHolidays = async (employeeId, fromDate, toDate) => {
+  const filter = { status: true, people: { $in: [employeeId] } };
+  if (fromDate || toDate) {
+    filter.date = {};
+    if (fromDate) filter.date.$gte = utcDay(fromDate);
+    if (toDate) filter.date.$lte = new Date(utcDay(toDate).getTime() + 86399999);
+  }
+  const holidays = await Holiday.find(filter).lean();
+  const globalFilter = { status: true, $or: [{ people: { $size: 0 } }, { people: { $exists: false } }] };
+  if (filter.date) globalFilter.date = filter.date;
+  return holidays.concat(await Holiday.find(globalFilter).lean());
+};
+
 /**
  * Create a holiday
  * @param {Object} body
  * @returns {Promise<Holiday>}
  */
-const createHoliday = async (body) => {
-  return Holiday.create(body);
+const createHoliday = async (body, actorId) => {
+  const payload = { ...body, date: body.date ? utcDay(body.date) : body.date, createdBy: actorId };
+  if (payload.date) {
+    const existing = await getApplicableHolidaysForConflict(payload.date, payload.people || []);
+    if (existing) throw new ApiError(httpStatus.CONFLICT, 'Holiday applicability conflicts with an existing holiday');
+  }
+  return Holiday.create(payload);
+};
+
+const getApplicableHolidaysForConflict = async (date, people) => {
+  const records = await Holiday.find({ status: true, date: utcDay(date) }).lean();
+  const incoming = new Set((people || []).map(String));
+  return records.find((record) => !record.people?.length || !incoming.size || record.people.some((id) => incoming.has(String(id)))) || null;
 };
 
 /**
@@ -83,12 +113,14 @@ const getHolidayById = async (id) => {
  * @param {Object} updateBody
  * @returns {Promise<Holiday>}
  */
-const updateHolidayById = async (id, updateBody) => {
+const updateHolidayById = async (id, updateBody, actorId) => {
   const holiday = await getHolidayById(id);
   if (!holiday) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Holiday not found');
   }
-  Object.assign(holiday, updateBody);
+  const payload = { ...updateBody };
+  if (payload.date) payload.date = utcDay(payload.date);
+  Object.assign(holiday, payload, { updatedBy: actorId });
   await holiday.save();
   return holiday;
 };
@@ -98,12 +130,16 @@ const updateHolidayById = async (id, updateBody) => {
  * @param {ObjectId} id
  * @returns {Promise<Holiday>}
  */
-const deleteHolidayById = async (id) => {
+const deleteHolidayById = async (id, actorId) => {
   const holiday = await getHolidayById(id);
   if (!holiday) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Holiday not found');
   }
-  await holiday.remove();
+  holiday.status = false;
+  holiday.deactivatedBy = actorId;
+  holiday.deactivatedAt = new Date();
+  holiday.updatedBy = actorId;
+  await holiday.save();
   return holiday;
 };
 
@@ -164,4 +200,5 @@ module.exports = {
   deleteHolidayById,
   addPerson,
   removePerson,
+  getApplicableHolidays,
 };

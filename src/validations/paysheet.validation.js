@@ -56,7 +56,7 @@ const getPayrollList = {
     month:        Joi.number().integer().min(1).max(12).optional(),
     year:         Joi.number().integer().min(2000).max(2100).optional(),
     search:       Joi.string().allow('').optional(),       // name or employeeId
-    status:       Joi.string().valid('paid', 'pending', 'cancelled', 'processed', 'draft').optional(),
+    status:       Joi.string().valid('draft', 'processed', 'paid', 'stopped', 'resumed').optional(),
     departmentId: Joi.string().custom(objectId).optional(),
     page:         Joi.number().integer().min(1).optional(),
     limit:        Joi.number().integer().min(1).max(100).optional(),
@@ -75,7 +75,7 @@ const updatePayrollStatus = {
     payrollId: Joi.string().custom(objectId).required(),
   }),
   body: Joi.object().keys({
-    status: Joi.string().valid('paid', 'pending', 'cancelled', 'processed', 'draft').required(),
+    status: Joi.string().valid('draft', 'processed', 'paid', 'stopped', 'resumed').required(),
   }),
 };
 

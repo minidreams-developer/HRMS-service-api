@@ -69,6 +69,9 @@ const payrollSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    // Employee snapshot values applied for this payroll period.
+    pfAmount: { type: Number, default: 0, min: 0 },
+    esiAmount: { type: Number, default: 0, min: 0 },
 
     // Payroll status
     status: {
@@ -76,6 +79,11 @@ const payrollSchema = new mongoose.Schema(
       enum: ['draft', 'processed', 'paid', 'stopped', 'resumed'],
       default: 'draft',
     },
+    processedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    processedAt: Date,
+    paidBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    paidAt: Date,
+    updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
 
     // Stop/Resume functionality
     stopDetails: {

@@ -48,7 +48,19 @@ const buildLookupStages = () => [
       pipeline: [
         {
           $match: {
-            $expr: { $eq: ['$_id', { $toObjectId: { $ifNull: ['$$deptId', '000000000000000000000000'] } }] },
+            $expr: {
+              $eq: [
+                '$_id',
+                {
+                  $convert: {
+                    input: '$$deptId',
+                    to: 'objectId',
+                    onError: null,
+                    onNull: null,
+                  },
+                },
+              ],
+            },
           },
         },
         { $project: { departmentName: 1 } },

@@ -1,0 +1,14 @@
+const httpStatus = require('http-status');
+const catchAsync = require('../utils/catchAsync');
+const { dayOffService } = require('../services');
+const pick = require('../utils/pick');
+const { roleRights } = require('../config/roles');
+const canManage = (user) => roleRights.get(user.role)?.includes('manageDayOffHolidays');
+const options = (query) => pick(query, ['page', 'limit', 'sortBy']);
+const list = catchAsync(async (req, res) => res.send(await dayOffService.queryDayOffs(pick(req.query, ['employeeId', 'fromDate', 'toDate', 'status']), options(req.query))));
+const create = catchAsync(async (req, res) => res.status(httpStatus.CREATED).send(await dayOffService.createDayOff(req.body, req.user._id)));
+const get = catchAsync(async (req, res) => { const item = await dayOffService.getDayOffById(req.params.dayOffId); if (!item) return res.status(404).send({ message: 'Day Off not found' }); if (!canManage(req.user) && String(item.employeeId?._id || item.employeeId) !== String(req.user._id)) return res.status(403).send({ message: 'Forbidden' }); return res.send(item); });
+const employee = catchAsync(async (req, res) => { if (!canManage(req.user) && String(req.user._id) !== String(req.params.employeeId)) return res.status(403).send({ message: 'Forbidden' }); return res.send(await dayOffService.queryDayOffs({ ...pick(req.query, ['fromDate', 'toDate', 'status']), employeeId: req.params.employeeId }, options(req.query))); });
+const update = catchAsync(async (req, res) => res.send(await dayOffService.updateDayOff(req.params.dayOffId, req.body, req.user._id)));
+const remove = catchAsync(async (req, res) => { await dayOffService.deactivateDayOff(req.params.dayOffId, req.user._id); res.status(httpStatus.NO_CONTENT).send(); });
+module.exports = { list, create, get, employee, update, remove };

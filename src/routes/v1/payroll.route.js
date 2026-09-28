@@ -1,5 +1,6 @@
 const express = require('express');
 const validate = require('../../middlewares/validate');
+const auth = require('../../middlewares/auth');
 const payrollValidation = require('../../validations/payroll.validation');
 const { payrollController } = require('../../controllers');
 
@@ -21,35 +22,35 @@ const router = express.Router();
 
 router
   .route('/')
-  .get(validate(payrollValidation.getPayrollList), payrollController.getPayrollList)
-  .post(validate(payrollValidation.createPayroll), payrollController.createPayroll);
+  .get(auth('manageAttendance'), validate(payrollValidation.getPayrollList), payrollController.getPayrollList)
+  .post(auth('manageAttendance'), validate(payrollValidation.createPayroll), payrollController.createPayroll);
 
 router
   .route('/stopped')
-  .get(validate(payrollValidation.getStoppedPayrolls), payrollController.getStoppedPayrolls);
+  .get(auth('manageAttendance'), validate(payrollValidation.getStoppedPayrolls), payrollController.getStoppedPayrolls);
 
 router
   .route('/:employeeId/preview')
-  .get(validate(payrollValidation.getEmployeePayroll), payrollController.getEmployeePayroll);
+  .get(auth('manageAttendance'), validate(payrollValidation.getEmployeePayroll), payrollController.getEmployeePayroll);
 
 router
   .route('/:employeeId/process')
-  .post(validate(payrollValidation.processPayroll), payrollController.processPayroll);
+  .post(auth('manageAttendance'), validate(payrollValidation.processPayroll), payrollController.processPayroll);
 
 router
   .route('/:employeeId/stop')
-  .post(validate(payrollValidation.stopPayroll), payrollController.stopPayroll);
+  .post(auth('manageAttendance'), validate(payrollValidation.stopPayroll), payrollController.stopPayroll);
 
 router
   .route('/:employeeId/resume')
-  .post(validate(payrollValidation.resumePayroll), payrollController.resumePayroll);
+  .post(auth('manageAttendance'), validate(payrollValidation.resumePayroll), payrollController.resumePayroll);
 
 router
   .route('/:employeeId')
-  .put(validate(payrollValidation.upsertPayroll), payrollController.upsertPayroll);
+  .put(auth('manageAttendance'), validate(payrollValidation.upsertPayroll), payrollController.upsertPayroll);
 
 router
   .route('/:payrollId')
-  .delete(validate(payrollValidation.deletePayroll), payrollController.deletePayroll);
+  .delete(auth('manageAttendance'), validate(payrollValidation.deletePayroll), payrollController.deletePayroll);
 
 module.exports = router;

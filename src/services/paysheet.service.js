@@ -1,6 +1,7 @@
 const httpStatus = require('http-status');
 const mongoose = require('mongoose');
 const { User, Payroll, Paysheet } = require('../models');
+const payrollService = require('./payroll.service');
 const ApiError = require('../utils/ApiError');
 
 // Month names for charts
@@ -619,15 +620,7 @@ const getPayrollDetail = async (payrollId) => {
 /**
  * Update the status of a payroll record (paid / pending / cancelled).
  */
-const updatePayrollStatus = async (payrollId, status) => {
-  const payroll = await Payroll.findById(payrollId);
-  if (!payroll) {
-    throw new ApiError(httpStatus.NOT_FOUND, 'Payroll record not found');
-  }
-  payroll.status = status;
-  await payroll.save();
-  return payroll;
-};
+const updatePayrollStatus = async (payrollId, status, actorId) => payrollService.updatePayrollStatus(payrollId, status, actorId);
 
 module.exports = {
   getPaysheetDashboard,

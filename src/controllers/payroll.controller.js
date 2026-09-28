@@ -34,6 +34,7 @@ const getEmployeePayroll = catchAsync(async (req, res) => {
  */
 const upsertPayroll = catchAsync(async (req, res) => {
   const { month, year, ...body } = req.body;
+  body.updatedBy = req.user._id;
   const result = await payrollService.upsertPayroll(req.params.employeeId, month, year, body);
   res.send(result);
 });
@@ -45,7 +46,7 @@ const upsertPayroll = catchAsync(async (req, res) => {
  */
 const processPayroll = catchAsync(async (req, res) => {
   const { month, year } = req.body;
-  const result = await payrollService.processPayroll(req.params.employeeId, month, year);
+  const result = await payrollService.processPayroll(req.params.employeeId, month, year, req.user._id);
   res.status(httpStatus.OK).send(result);
 });
 
@@ -85,7 +86,7 @@ const resumePayroll = catchAsync(async (req, res) => {
  * Query params: month, year, stopType, reason, page, limit
  */
 const createPayroll = catchAsync(async (req, res) => {
-  const payroll = await payrollService.createPayroll(req.body);
+  const payroll = await payrollService.createPayroll(req.body, req.user._id);
   res.status(httpStatus.CREATED).send(payroll);
 });
 

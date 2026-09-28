@@ -18,6 +18,9 @@ const createAttendance = {
     timingStatus: Joi.string().valid('onTime', 'earlyOut', 'arrivedLate').optional(),
     attendanceStatus: Joi.string().valid('onTime', 'earlyOut', 'arrivedLate').optional(),
     remarks: Joi.string().allow('').optional(),
+    createdReason: Joi.string().trim().allow('').optional(),
+    createdBy: Joi.any().strip(),
+    creationSource: Joi.any().strip(),
   }),
 };
 
@@ -27,6 +30,10 @@ const getAttendances = {
     search:           Joi.string().optional(),
     // direct field filters
     employeeId:       Joi.string().custom(objectId).optional(),
+    role:             Joi.string().valid('employee', 'staff', 'manager', 'hr_manager', 'subAdmin', 'admin', 'agent', 'contractor', 'team_lead').optional(),
+    department:       Joi.string().trim().optional(),
+    departmentId:     Joi.string().custom(objectId).optional(),
+    shift:            Joi.string().trim().optional(),
     shiftId:          Joi.string().custom(objectId).optional(),
     attendanceStatus: Joi.string().valid('onTime', 'earlyOut', 'arrivedLate').optional(),
     timingStatus:     Joi.string().valid('onTime', 'earlyOut', 'arrivedLate').optional(),

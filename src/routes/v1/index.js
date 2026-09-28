@@ -10,6 +10,8 @@ const branchRoute = require('./branch.route');
 const departmentRoute = require('./department.route');
 const offBoardRoute = require('./offBoard.route');
 const attendanceRoute = require('./attendance.route');
+const rosterRoute = require('./roster.route');
+const timesheetRoute = require('./timesheet.route');
 const shiftRoute = require('./shift.route');
 const leaveRequestsRoute = require('./leaveRequests.route');
 const leaveBalanceRoute = require('./leaveBalance.route');
@@ -29,6 +31,7 @@ const mediaRoute = require('./media.route');
 const faceRoute = require('./face.route');
 const permissionRoute = require('./permission.route');
 const shiftAssignmentRoute = require('./shiftAssignment.route');
+const dayOffRoute = require('./dayOff.route');
 
 const router = express.Router();
 
@@ -78,6 +81,14 @@ const defaultRoutes = [
     route: attendanceRoute,
   },
   {
+    path: '/roster',
+    route: rosterRoute,
+  },
+  {
+    path: '/timesheet',
+    route: timesheetRoute,
+  },
+  {
     path: '/shifts',
     route: shiftRoute,
   },
@@ -98,6 +109,10 @@ const defaultRoutes = [
   {
     path: '/holidays',
     route: holidayRoute,
+  },
+  {
+    path: '/day-offs',
+    route: dayOffRoute,
   },
   {
     path: '/contractors',

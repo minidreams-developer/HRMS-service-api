@@ -88,6 +88,8 @@ const createUser = catchAsync(async (req, res) => {
       specialAllowance: req.body.specialAllowance,
       specialAllowance2: req.body.specialAllowance2,
       otherFixedAllowances: req.body.otherFixedAllowances,
+      pfAmount: req.body.pfAmount,
+      esiAmount: req.body.esiAmount,
     },
     
     // Bank Details

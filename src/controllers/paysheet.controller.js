@@ -98,7 +98,7 @@ const getPayrollDetail = catchAsync(async (req, res) => {
  * Body: { status }
  */
 const updatePayrollStatus = catchAsync(async (req, res) => {
-  const result = await paysheetService.updatePayrollStatus(req.params.payrollId, req.body.status);
+  const result = await paysheetService.updatePayrollStatus(req.params.payrollId, req.body.status, req.user._id);
   res.send(result);
 });
 

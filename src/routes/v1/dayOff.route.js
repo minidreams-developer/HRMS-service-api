@@ -1,0 +1,10 @@
+const express = require('express');
+const auth = require('../../middlewares/auth');
+const validate = require('../../middlewares/validate');
+const validation = require('../../validations/dayOff.validation');
+const controller = require('../../controllers/dayOff.controller');
+const router = express.Router();
+router.route('/').post(auth('manageDayOffHolidays'), validate(validation.create), controller.create).get(auth('manageDayOffHolidays'), validate(validation.list), controller.list);
+router.get('/employee/:employeeId', auth(), validate(validation.employee), controller.employee);
+router.route('/:dayOffId').get(auth(), validate(validation.id), controller.get).patch(auth('manageDayOffHolidays'), validate(validation.update), controller.update).delete(auth('manageDayOffHolidays'), validate(validation.id), controller.remove);
+module.exports = router;
