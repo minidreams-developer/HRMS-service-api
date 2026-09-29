@@ -30,6 +30,20 @@ const getEmployeePayroll = {
   }),
 };
 
+const getMyPayroll = {
+  query: Joi.object().keys({
+    month: Joi.number().integer().min(1).max(12).optional(),
+    year: Joi.number().integer().min(2000).max(2100).optional(),
+    status: Joi.string().valid('draft', 'processed', 'paid', 'stopped', 'resumed').optional(),
+    sortBy: Joi.string().optional(),
+    limit: Joi.number().integer().min(1).max(100).optional(),
+    page: Joi.number().integer().min(1).optional(),
+  }),
+};
+
+const getMyPayrollById = { params: Joi.object().keys({ payrollId: Joi.string().custom(objectId).required() }) };
+const getPayslip = { params: Joi.object().keys({ payrollId: Joi.string().custom(objectId).required() }) };
+
 const createPayroll = {
   body: Joi.object().keys({
     employeeId: Joi.string().custom(objectId).required(),
@@ -133,6 +147,9 @@ const getStoppedPayrolls = {
 module.exports = {
   getPayrollList,
   getEmployeePayroll,
+  getMyPayroll,
+  getMyPayrollById,
+  getPayslip,
   createPayroll,
   upsertPayroll,
   processPayroll,

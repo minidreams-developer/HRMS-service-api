@@ -53,6 +53,7 @@ const shiftBody = Joi.object().keys({
   isShiftActive: Joi.boolean(),
   minWorkingHours: workingHoursString,
   halfDayWorkingHours: workingHoursString,
+  overtimeAfterHours: Joi.number().greater(0).optional(),
 }).unknown(true).custom((value, helpers) => {
   if (value.minWorkingHours || value.halfDayWorkingHours) {
     if (!value.minWorkingHours || !value.halfDayWorkingHours) return helpers.error('any.invalid');

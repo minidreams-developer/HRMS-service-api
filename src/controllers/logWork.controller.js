@@ -3,12 +3,15 @@ const pick = require('../utils/pick');
 const ApiError = require('../utils/ApiError');
 const catchAsync = require('../utils/catchAsync');
 const logWorkService = require('../services/logWork.service');
+const management = new Set(['manager', 'hr_manager', 'subAdmin', 'admin']);
+const guard = (req) => { if (!management.has(req.user.role)) throw new ApiError(httpStatus.FORBIDDEN, 'Only management may manage LogWork'); };
 
 /**
  * POST /v1/log-work
  * Create a new work log entry for a contractor.
  */
 const createLogWork = catchAsync(async (req, res) => {
+  guard(req);
   const log = await logWorkService.createLogWork(req.body);
   res.status(httpStatus.CREATED).send(log);
 });
@@ -18,6 +21,7 @@ const createLogWork = catchAsync(async (req, res) => {
  * List all work log entries with pagination.
  */
 const getLogWorks = catchAsync(async (req, res) => {
+  guard(req);
   const filter = pick(req.query, ['branch']);
   const options = pick(req.query, ['sortBy', 'limit', 'page']);
   const result = await logWorkService.queryLogWork(filter, options);
@@ -30,6 +34,7 @@ const getLogWorks = catchAsync(async (req, res) => {
  * Accepts MongoDB _id or employeeId (CTR-XXXXXX).
  */
 const getLogsByContractor = catchAsync(async (req, res) => {
+  guard(req);
   const options = pick(req.query, ['sortBy', 'limit', 'page']);
   const result = await logWorkService.getLogsByContractor(req.params.contractorId, options);
   res.send(result);
@@ -40,6 +45,7 @@ const getLogsByContractor = catchAsync(async (req, res) => {
  * Get a single work log entry by its _id.
  */
 const getLogWork = catchAsync(async (req, res) => {
+  guard(req);
   const log = await logWorkService.getLogWorkById(req.params.logId);
   if (!log) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Work log entry not found');
@@ -52,6 +58,7 @@ const getLogWork = catchAsync(async (req, res) => {
  * Partially update a work log entry.
  */
 const updateLogWork = catchAsync(async (req, res) => {
+  guard(req);
   const log = await logWorkService.updateLogWorkById(req.params.logId, req.body);
   res.send(log);
 });
@@ -61,6 +68,7 @@ const updateLogWork = catchAsync(async (req, res) => {
  * Delete a work log entry.
  */
 const deleteLogWork = catchAsync(async (req, res) => {
+  guard(req);
   await logWorkService.deleteLogWorkById(req.params.logId);
   res.status(httpStatus.NO_CONTENT).send();
 });

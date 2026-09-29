@@ -78,6 +78,9 @@ const buildLookupStages = () => [
       endTime: 1,
       totalDuration: 1,
       status: 1,
+      source: 1,
+      attendanceId: 1,
+      generatedBySystem: 1,
       createdAt: 1,
       updatedAt: 1,
       employee: {
@@ -139,6 +142,7 @@ const queryOvertime = async (filter, options) => {
   if (filter.status) {
     matchStage.status = filter.status;
   }
+  if (filter.source) matchStage.source = filter.source;
 
   // OvertimeDate range
   if (filter.fromDate || filter.toDate) {

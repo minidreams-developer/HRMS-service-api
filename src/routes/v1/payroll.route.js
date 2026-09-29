@@ -30,6 +30,18 @@ router
   .get(auth('manageAttendance'), validate(payrollValidation.getStoppedPayrolls), payrollController.getStoppedPayrolls);
 
 router
+  .route('/me')
+  .get(auth(), validate(payrollValidation.getMyPayroll), payrollController.getMyPayroll);
+
+router
+  .route('/me/:payrollId')
+  .get(auth(), validate(payrollValidation.getMyPayrollById), payrollController.getMyPayrollById);
+
+router
+  .route('/:payrollId/payslip')
+  .get(auth(), validate(payrollValidation.getPayslip), payrollController.getPayslip);
+
+router
   .route('/:employeeId/preview')
   .get(auth('manageAttendance'), validate(payrollValidation.getEmployeePayroll), payrollController.getEmployeePayroll);
 

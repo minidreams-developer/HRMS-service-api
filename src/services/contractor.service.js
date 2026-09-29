@@ -6,6 +6,7 @@ const LogWork = require('../models/logWork.model');
 const EmergencyContact = require('../models/emergencyContact.model');
 const ApiError = require('../utils/ApiError');
 const { setPending, getPending, clearPending } = require('../utils/pendingCode');
+const { ContractorWorkerAssignment } = require('../models');
 
 const CTR_ID_KEY = 'contractorId';
 
@@ -345,10 +346,23 @@ const deleteContractorById = async (contractorId) => {
   if (!contractor) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Contractor not found');
   }
-  await contractor.remove();
+  contractor.isDeleted = true;
+  contractor.deletedAt = new Date();
+  await contractor.save();
   return contractor;
-  await contractor.remove();
-  return contractor;
+};
+
+const getContractorWorkers = async (contractorId, filter = {}, options = {}) => {
+  const contractor = await User.findOne({ _id: contractorId, role: 'contractor' });
+  if (!contractor) throw new ApiError(404, 'Contractor not found');
+  const date = filter.date ? new Date(filter.date) : new Date();
+  const assignments = await ContractorWorkerAssignment.find({ contractorId, effectiveFrom: { $lte: date }, $or: [{ effectiveTo: null }, { effectiveTo: { $gte: date } }] }).lean();
+  const workerIds = assignments.map((a) => a.workerId);
+  const userFilter = { _id: { $in: workerIds }, isDeleted: { $ne: true } };
+  if (filter.role) userFilter.role = filter.role;
+  if (filter.search) userFilter.$or = [{ name: { $regex: filter.search, $options: 'i' } }, { employeeId: { $regex: filter.search, $options: 'i' } }];
+  const limit = Number(options.limit) || 10; const page = Number(options.page) || 1; const totalResults = await User.countDocuments(userFilter); const results = await User.find(userFilter).select('name employeeId role isActive workInformation').skip((page - 1) * limit).limit(limit).lean();
+  return { results, page, limit, totalResults, totalPages: Math.ceil(totalResults / limit) };
 };
 
 module.exports = {
@@ -358,4 +372,5 @@ module.exports = {
   getContractorById,
   updateContractorById,
   deleteContractorById,
+  getContractorWorkers,
 };

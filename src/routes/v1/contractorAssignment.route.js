@@ -1,0 +1,2 @@
+const express = require('express'); const auth = require('../../middlewares/auth'); const validate = require('../../middlewares/validate'); const v = require('../../validations/contractorAssignment.validation'); const c = require('../../controllers/contractorAssignment.controller');
+const router = express.Router(); router.post('/', auth(), validate(v.create), c.create); router.patch('/:assignmentId', auth(), validate(v.update), c.update); router.get('/worker/:workerId', auth(), validate(v.history), c.history); module.exports = router;

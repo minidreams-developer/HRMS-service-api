@@ -23,6 +23,68 @@ const getShiftForAttendance = async (shiftId) => {
   return mongoose.model('Shift').findById(shiftId).lean();
 };
 
+const syncAttendanceOvertime = async (attendance, actorId) => {
+  const snapshotThreshold = Number(attendance.shiftSnapshot?.overtimeAfterHours);
+  let threshold = Number.isFinite(snapshotThreshold) && snapshotThreshold > 0 ? snapshotThreshold : null;
+  if (!threshold && attendance.shiftId) {
+    const shift = await getShiftForAttendance(attendance.shiftId);
+    const resolvedThreshold = Number(shift?.overtimeAfterHours);
+    if (Number.isFinite(resolvedThreshold) && resolvedThreshold > 0) threshold = resolvedThreshold;
+  }
+
+  const linked = await Overtime.find({ attendanceId: attendance._id, source: 'attendance' }).sort({ createdAt: -1 });
+  const excess = threshold && Number(attendance.totalWorkedHours) > threshold
+    ? Number((Number(attendance.totalWorkedHours) - threshold).toFixed(4))
+    : 0;
+  const pending = linked.find((record) => record.status === 'pending');
+  const approved = linked.find((record) => record.status === 'approved');
+
+  if (!excess || !attendance.loginTime || !attendance.logoutTime) {
+    if (pending) {
+      pending.status = 'cancelled';
+      pending.cancelledBy = actorId;
+      pending.cancelledAt = new Date();
+      pending.cancellationReason = 'Attendance no longer exceeds the overtime threshold';
+      pending.statusHistory.push({ status: 'cancelled', changedBy: actorId, changedAt: new Date(), reason: pending.cancellationReason });
+      await pending.save();
+    }
+    return approved || linked[0] || null;
+  }
+
+  // An approved request is payroll history and must never be rewritten by an attendance edit.
+  if (approved) return approved;
+  // A rejected request remains history; do not reopen it or create retry duplicates.
+  if (linked.some((record) => record.status === 'rejected')) return linked.find((record) => record.status === 'rejected');
+
+  const end = new Date(attendance.logoutTime);
+  const start = new Date(end.getTime() - excess * 3600000);
+  const payload = {
+    employeeId: attendance.employeeId,
+    requestedDate: attendance.attendanceDay || utcDay(attendance.date),
+    OvertimeDate: attendance.attendanceDay || utcDay(attendance.date),
+    startTime: start,
+    endTime: end,
+    totalDuration: excess,
+    status: 'pending',
+    source: 'attendance',
+    attendanceId: attendance._id,
+    generatedBySystem: true,
+    reason: 'Automatic overtime from attendance excess',
+    createdBy: actorId,
+  };
+  if (pending) {
+    Object.assign(pending, payload);
+    await pending.save();
+    return pending;
+  }
+  try {
+    return await Overtime.create({ ...payload, statusHistory: [{ status: 'pending', changedBy: actorId, changedAt: new Date(), reason: payload.reason }] });
+  } catch (error) {
+    if (error.code === 11000) return Overtime.findOne({ attendanceId: attendance._id, source: 'attendance', status: { $in: ['pending', 'approved'] } });
+    throw error;
+  }
+};
+
 const deriveAttendance = async (body, existing = null, options = {}) => {
   const record = { ...(existing || {}), ...body };
   if (!record.shiftId && record.employeeId && record.date) {
@@ -66,7 +128,7 @@ const deriveAttendance = async (body, existing = null, options = {}) => {
     ? (shiftConfig.breakDuration || 0)
     : (shift?.breakManagement?.enabled === true ? (shift.breakManagement.duration || 0) : 0);
   if (shift && record.shiftId && (!record.shiftSnapshot || !snapshotMatchesShift)) {
-    record.shiftSnapshot = { shiftId: shift._id, shiftName: shift.shiftName, shiftCode: shift.shiftCode, minWorkingHours: shift.minWorkingHours, halfDayWorkingHours: shift.halfDayWorkingHours, breakEnabled: shift.breakManagement?.enabled === true, breakDuration: breakMinutes, weekOff: shift.weekOff || [], timings: shift.timings || [] };
+    record.shiftSnapshot = { shiftId: shift._id, shiftName: shift.shiftName, shiftCode: shift.shiftCode, minWorkingHours: shift.minWorkingHours, halfDayWorkingHours: shift.halfDayWorkingHours, overtimeAfterHours: shift.overtimeAfterHours, breakEnabled: shift.breakManagement?.enabled === true, breakDuration: breakMinutes, weekOff: shift.weekOff || [], timings: shift.timings || [] };
   }
   const totalWorkedHours = Math.max(0, grossHours - (breakMinutes / 60));
   record.totalWorkedHours = Number(totalWorkedHours.toFixed(4));
@@ -123,7 +185,9 @@ const createAttendance = async (body, actorId) => {
   if (duplicate) throw new ApiError(httpStatus.CONFLICT, 'Attendance already exists for this employee on this date');
   if (!attendance.timingStatus && attendance.attendanceStatus) attendance.timingStatus = attendance.attendanceStatus;
   try {
-    return await Attendance.create(attendance);
+    const saved = await Attendance.create(attendance);
+    await syncAttendanceOvertime(saved, actorId);
+    return saved;
   } catch (error) {
     if (error.code === 11000) throw new ApiError(httpStatus.CONFLICT, 'Attendance already exists for this employee on this date');
     throw error;
@@ -278,6 +342,7 @@ const updateAttendanceById = async (id, updateBody, editor) => {
     if (error.code === 11000) throw new ApiError(httpStatus.CONFLICT, 'Attendance already exists for this employee on this date');
     throw error;
   }
+  await syncAttendanceOvertime(attendance, editor);
   await populateAttendance(attendance);
   return attendance;
 };

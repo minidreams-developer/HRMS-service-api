@@ -13,7 +13,7 @@ const createOvertime = catchAsync(async (req, res) => {
 });
 
 const getOvertime = catchAsync(async (req, res) => {
-  const filter  = pick(req.query, ['search', 'employeeId', 'status', 'fromDate', 'toDate']);
+  const filter  = pick(req.query, ['search', 'employeeId', 'status', 'source', 'fromDate', 'toDate']);
   if (!canManage(req.user)) filter.employeeId = req.user._id;
   const options = pick(req.query, ['sortBy', 'limit', 'page']);
   const result  = await overtimeManagementService.queryOvertime(filter, options);

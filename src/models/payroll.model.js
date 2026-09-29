@@ -117,6 +117,15 @@ const payrollSchema = new mongoose.Schema(
 
     // Snapshot of computed values (populated when status → processed/paid)
     snapshot: {
+      employee: {
+        id: { type: mongoose.Schema.Types.ObjectId },
+        employeeCode: String,
+        name: String,
+        role: String,
+        designation: String,
+        department: String,
+        branch: String,
+      },
       fullDays: { type: Number, default: 0 },
       halfDays: { type: Number, default: 0 },
       offDays: { type: Number, default: 0 },
@@ -126,6 +135,7 @@ const payrollSchema = new mongoose.Schema(
       grossWages: { type: Number, default: 0 },
       earnedWages: { type: Number, default: 0 },
       overtimeAmount: { type: Number, default: 0 },
+      overtimeHours: { type: Number, default: 0 },
       grossEarnings: { type: Number, default: 0 },
       takeHome: { type: Number, default: 0 },
     },

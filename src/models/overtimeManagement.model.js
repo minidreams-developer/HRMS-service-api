@@ -21,6 +21,19 @@ const overtimeSchema = new mongoose.Schema({
     totalDuration: {
         type: Number
     },
+    source: {
+        type: String,
+        enum: ['manual', 'attendance'],
+        default: 'manual',
+    },
+    attendanceId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Attendance',
+    },
+    generatedBySystem: {
+        type: Boolean,
+        default: false,
+    },
     status: {
         type: String,
         enum: ["pending", "approved", "rejected", "cancelled"],
@@ -45,6 +58,10 @@ const overtimeSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 overtimeSchema.index({ employeeId: 1, startTime: 1, endTime: 1, status: 1 });
+overtimeSchema.index(
+    { attendanceId: 1 },
+    { unique: true, partialFilterExpression: { source: 'attendance', attendanceId: { $exists: true }, status: { $in: ['pending', 'approved'] } } }
+);
 
 overtimeSchema.plugin(toJSON);
 overtimeSchema.plugin(paginate);

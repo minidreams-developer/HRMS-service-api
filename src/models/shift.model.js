@@ -96,6 +96,10 @@ const shiftSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    overtimeAfterHours: {
+      type: Number,
+      min: 0.000001,
+    },
 
     // Advanced Timing Rules
     gracePeriod: {

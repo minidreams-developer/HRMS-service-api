@@ -207,6 +207,7 @@ const computePayrollForEmployee = async (employee, month, year, payrollOverride 
     earnedWages,
     otherWages,
     overtimeAmount,
+    overtimeHours: totalOvertimeHours,
     overlappingOvertimeRecords: overtimeDiagnostics.groups,
     overlappingOvertimeDates: overtimeDiagnostics.overlappingDates,
     extras,
@@ -239,7 +240,7 @@ const getPayrollList = async (query, options) => {
 
   // ── Build user match stage ────────────────────────────────────────────────
   const userMatch = {
-    role: { $ne: 'admin' },
+    role: { $in: ['employee', 'staff'] },
     isActive: 'Active',
   };
 
@@ -360,7 +361,7 @@ const getPayrollList = async (query, options) => {
  */
 const getEmployeePayroll = async (employeeId, month, year) => {
   const emp = await User.findById(employeeId)
-    .select('name employeeId workInformation profilePic isDeleted')
+    .select('name employeeId role workInformation profilePic isDeleted')
     .populate('workInformation.SalaryDetails')
     .lean();
 
@@ -416,6 +417,7 @@ const upsertPayroll = async (employeeId, month, year, body) => {
   if (!emp || emp.isDeleted === true) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Employee not found');
   }
+  if (!['employee', 'staff'].includes(emp.role)) throw new ApiError(httpStatus.BAD_REQUEST, 'Payroll is only available for employee and staff users');
 
   const allowedFields = [
     'extras', 'penalties', 'loanAndAdvance', 'otherDeductions', 'otherWages',
@@ -449,7 +451,7 @@ const upsertPayroll = async (employeeId, month, year, body) => {
  */
 const processPayroll = async (employeeId, month, year, actorId) => {
   const emp = await User.findById(employeeId)
-    .select('name employeeId workInformation profilePic isDeleted')
+    .select('name employeeId role workInformation profilePic isDeleted')
     .populate('workInformation.SalaryDetails')
     .lean();
 
@@ -472,6 +474,15 @@ const processPayroll = async (employeeId, month, year, actorId) => {
         pfAmount: computed.pfAmount,
         esiAmount: computed.esiAmount,
         snapshot: {
+          employee: {
+            id: emp._id,
+            employeeCode: emp.employeeId,
+            name: emp.name,
+            role: emp.role,
+            designation: emp.workInformation?.designation,
+            department: emp.workInformation?.department?.name || emp.workInformation?.department,
+            branch: emp.workInformation?.branch?.name || emp.workInformation?.branch,
+          },
           fullDays: computed.fullDays,
           halfDays: computed.halfDays,
           offDays: computed.offDays,
@@ -481,6 +492,7 @@ const processPayroll = async (employeeId, month, year, actorId) => {
           grossWages: computed.grossWages,
           earnedWages: computed.earnedWages,
           overtimeAmount: computed.overtimeAmount,
+          overtimeHours: computed.overtimeHours,
           grossEarnings: computed.grossEarnings,
           takeHome: computed.takeHome,
         },
@@ -665,6 +677,58 @@ const getStoppedPayrolls = async (query, options) => {
   };
 };
 
+const getPayrollHistoryForUser = async (employeeId, query = {}, options = {}) => {
+  const limit = Math.min(parseInt(options.limit, 10) || 10, 100);
+  const page = Math.max(parseInt(options.page, 10) || 1, 1);
+  const filter = { employeeId };
+  if (query.month) filter.month = Number(query.month);
+  if (query.year) filter.year = Number(query.year);
+  if (query.status) filter.status = query.status;
+  const totalResults = await Payroll.countDocuments(filter);
+  const sort = {};
+  String(options.sortBy || '-year,-month').split(',').forEach((item) => {
+    const [field, direction] = item.replace(/^-/, '').split(':');
+    if (['month', 'year', 'status', 'createdAt', 'updatedAt'].includes(field)) sort[field] = item.startsWith('-') || direction === 'desc' ? -1 : 1;
+  });
+  if (!Object.keys(sort).length) Object.assign(sort, { year: -1, month: -1 });
+  const results = await Payroll.find(filter).sort(sort).skip((page - 1) * limit).limit(limit).lean();
+  return { results, page, limit, totalPages: Math.ceil(totalResults / limit), totalResults };
+};
+
+const getPayrollForUser = async (employeeId, payrollId) => {
+  const payroll = await Payroll.findOne({ _id: payrollId, employeeId }).lean();
+  if (!payroll) throw new ApiError(httpStatus.NOT_FOUND, 'Payroll record not found');
+  return payroll;
+};
+
+const getPayslip = async (payrollId, employeeId = null) => {
+  const payroll = await Payroll.findById(payrollId).lean();
+  if (!payroll) throw new ApiError(httpStatus.NOT_FOUND, 'Payroll record not found');
+  if (employeeId && String(payroll.employeeId) !== String(employeeId)) throw new ApiError(httpStatus.FORBIDDEN, 'Forbidden');
+  if (!['processed', 'paid'].includes(payroll.status) && !(payroll.status === 'stopped' && payroll.processedAt && payroll.snapshot)) {
+    throw new ApiError(httpStatus.CONFLICT, 'Payslip is available only for processed or paid payroll');
+  }
+  const snapshot = payroll.snapshot || {};
+  const employee = snapshot.employee || {};
+  const pfAmount = payroll.pfAmount || 0;
+  const esiAmount = payroll.esiAmount || 0;
+  return {
+    payslip: {
+      payrollId: payroll._id,
+      month: payroll.month,
+      year: payroll.year,
+      status: payroll.status,
+      processedAt: payroll.processedAt || null,
+      paidAt: payroll.paidAt || null,
+      employee: { id: employee.id || payroll.employeeId, employeeCode: employee.employeeCode, name: employee.name, role: employee.role, designation: employee.designation, department: employee.department, branch: employee.branch },
+      attendance: { fullDays: snapshot.fullDays || 0, halfDays: snapshot.halfDays || 0, absentDays: snapshot.absentDays || 0, paidLeaves: snapshot.paidLeaves || 0, unpaidLeaves: snapshot.unpaidLeaves || 0, overtimeHours: snapshot.overtimeHours || 0 },
+      earnings: { grossWages: snapshot.grossWages || 0, earnedWages: snapshot.earnedWages || 0, overtimeAmount: snapshot.overtimeAmount || 0, extras: payroll.extras || 0, otherWages: payroll.otherWages || 0, grossEarnings: snapshot.grossEarnings || 0 },
+      deductions: { deductions: payroll.deductions || 0, penalties: payroll.penalties || 0, loanAndAdvance: payroll.loanAndAdvance || 0, otherDeductions: payroll.otherDeductions || 0, pfAmount, esiAmount, totalDeductions: Math.max(0, (snapshot.grossEarnings || 0) - (snapshot.takeHome || 0)) },
+      takeHome: snapshot.takeHome || 0,
+    },
+  };
+};
+
 module.exports = {
   computePayrollForEmployee,
   getPayrollList,
@@ -676,6 +740,9 @@ module.exports = {
   stopPayroll,
   resumePayroll,
   getStoppedPayrolls,
+  getPayrollHistoryForUser,
+  getPayrollForUser,
+  getPayslip,
   updatePayrollStatus,
   assertStatusTransition,
 };

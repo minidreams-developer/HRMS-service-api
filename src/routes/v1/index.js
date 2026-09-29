@@ -18,6 +18,8 @@ const leaveBalanceRoute = require('./leaveBalance.route');
 const overtimeRoute = require('./overtimeManagement.route');
 const holidayRoute = require('./holiday.route');
 const contractorRoute = require('./contractor.route');
+const contractorAssignmentRoute = require('./contractorAssignment.route');
+const contractorSettlementRoute = require('./contractorSettlement.route');
 const roleAccessRoute = require('./roleAccess.route');
 const organizationRoute = require('./organization.route');
 const payrollRoute = require('./payroll.route');
@@ -118,6 +120,8 @@ const defaultRoutes = [
     path: '/contractors',
     route: contractorRoute,
   },
+  { path: '/contractor-worker-assignments', route: contractorAssignmentRoute },
+  { path: '/contractor-settlements', route: contractorSettlementRoute },
   {
     path: '/log-work',
     route: require('./logWork.route'),

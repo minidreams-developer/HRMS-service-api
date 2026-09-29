@@ -2,6 +2,7 @@ const express = require('express');
 const logWorkController = require('../../controllers/logWork.controller');
 const validate = require('../../middlewares/validate');
 const logWorkValidation = require('../../validations/logWork.validation');
+const auth = require('../../middlewares/auth');
 
 const router = express.Router();
 
@@ -19,17 +20,17 @@ const router = express.Router();
 
 router
   .route('/')
-  .post(validate(logWorkValidation.createLogWork), logWorkController.createLogWork)
-  .get(validate(logWorkValidation.getLogWorks), logWorkController.getLogWorks);
+  .post(auth(), validate(logWorkValidation.createLogWork), logWorkController.createLogWork)
+  .get(auth(), validate(logWorkValidation.getLogWorks), logWorkController.getLogWorks);
 
 router
   .route('/contractor/:contractorId')
-  .get(validate(logWorkValidation.getLogsByContractor), logWorkController.getLogsByContractor);
+  .get(auth(), validate(logWorkValidation.getLogsByContractor), logWorkController.getLogsByContractor);
 
 router
   .route('/:logId')
-  .get(validate(logWorkValidation.getLogWork), logWorkController.getLogWork)
-  .patch(validate(logWorkValidation.updateLogWork), logWorkController.updateLogWork)
-  .delete(validate(logWorkValidation.deleteLogWork), logWorkController.deleteLogWork);
+  .get(auth(), validate(logWorkValidation.getLogWork), logWorkController.getLogWork)
+  .patch(auth(), validate(logWorkValidation.updateLogWork), logWorkController.updateLogWork)
+  .delete(auth(), validate(logWorkValidation.deleteLogWork), logWorkController.deleteLogWork);
 
 module.exports = router;

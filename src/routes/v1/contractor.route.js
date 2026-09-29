@@ -2,6 +2,7 @@ const express = require('express');
 const contractorController = require('../../controllers/contractor.controller');
 const validate = require('../../middlewares/validate');
 const contractorValidation = require('../../validations/contractor.validation');
+const auth = require('../../middlewares/auth');
 
 const router = express.Router();
 
@@ -22,20 +23,23 @@ const router = express.Router();
 
 router
   .route('/register')
-  .post(contractorController.registerContractor);
+  .post(auth(), contractorController.registerContractor);
 
 router
   .route('/generate-id')
-  .get(contractorController.generateContractorId);
+  .get(auth(), contractorController.generateContractorId);
 
 router
   .route('/')
-  .get(contractorController.getContractors);
+  .get(auth(), contractorController.getContractors);
+
+router.get('/:contractorId/workers', auth(), contractorController.getContractorWorkers);
+router.get('/:contractorId/earnings', auth(), contractorController.getContractorEarnings);
 
 router
   .route('/:contractorId')
-  .get(contractorController.getContractor)
-  .patch(contractorController.updateContractor)
-  .delete(contractorController.deleteContractor);
+  .get(auth(), contractorController.getContractor)
+  .patch(auth(), contractorController.updateContractor)
+  .delete(auth(), contractorController.deleteContractor);
 
 module.exports = router;

@@ -62,6 +62,7 @@ const attendanceSchema = new mongoose.Schema({
     shiftCode: String,
     minWorkingHours: String,
     halfDayWorkingHours: String,
+    overtimeAfterHours: Number,
     breakEnabled: Boolean,
     breakDuration: Number,
     weekOff: [String],

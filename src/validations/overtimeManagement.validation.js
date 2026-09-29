@@ -19,6 +19,7 @@ const getOvertime = {
     // direct filters
     employeeId: Joi.string().custom(objectId).optional(),
     status:     Joi.string().valid('pending', 'approved', 'rejected', 'cancelled').optional(),
+    source:     Joi.string().valid('manual', 'attendance').optional(),
     // overtime date range
     fromDate:   Joi.date().iso().optional(),
     toDate:     Joi.date().iso().optional(),

@@ -2,6 +2,9 @@ const httpStatus = require('http-status');
 const pick = require('../utils/pick');
 const catchAsync = require('../utils/catchAsync');
 const { payrollService } = require('../services');
+const ApiError = require('../utils/ApiError');
+const selfServiceRoles = new Set(['employee', 'staff']);
+const managementRoles = new Set(['manager', 'hr_manager', 'subAdmin', 'admin']);
 
 /**
  * GET /v1/payroll
@@ -25,6 +28,26 @@ const getEmployeePayroll = catchAsync(async (req, res) => {
   const year  = parseInt(req.query.year,  10) || new Date().getFullYear();
   const result = await payrollService.getEmployeePayroll(req.params.employeeId, month, year);
   res.send(result);
+});
+
+const assertSelfServiceRole = (user) => {
+  if (!selfServiceRoles.has(user.role)) throw new ApiError(httpStatus.FORBIDDEN, 'Forbidden');
+};
+
+const getMyPayroll = catchAsync(async (req, res) => {
+  assertSelfServiceRole(req.user);
+  res.send(await payrollService.getPayrollHistoryForUser(req.user._id, req.query, req.query));
+});
+
+const getMyPayrollById = catchAsync(async (req, res) => {
+  assertSelfServiceRole(req.user);
+  res.send(await payrollService.getPayrollForUser(req.user._id, req.params.payrollId));
+});
+
+const getPayslip = catchAsync(async (req, res) => {
+  const self = selfServiceRoles.has(req.user.role);
+  if (!self && !managementRoles.has(req.user.role)) throw new ApiError(httpStatus.FORBIDDEN, 'Forbidden');
+  res.send(await payrollService.getPayslip(req.params.payrollId, self ? req.user._id : null));
 });
 
 /**
@@ -100,6 +123,9 @@ const getStoppedPayrolls = catchAsync(async (req, res) => {
 module.exports = {
   getPayrollList,
   getEmployeePayroll,
+  getMyPayroll,
+  getMyPayrollById,
+  getPayslip,
   createPayroll,
   upsertPayroll,
   processPayroll,
