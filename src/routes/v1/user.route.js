@@ -45,8 +45,8 @@ router
 
 router
   .route('/agent')
-  .post(agentController.createAgent)
-  .get(agentController.getAgentId);
+  .post(auth('manageUsers'), agentController.createAgent)
+  .get(auth('manageUsers'), agentController.getAgentId);
 
 // GET /v1/users/agent/:agentId/members
 // Returns employees & staff linked to the agent via workInformation.contractAgent
@@ -54,7 +54,10 @@ router
 // Query params: ?page=1&limit=10
 router
   .route('/agent/:agentId/members')
-  .get(userController.getAgentMembers);
+  .get(auth('manageUsers'), userController.getAgentMembers)
+  .post(auth('manageUsers'), userController.assignAgentWorkers);
+
+router.route('/agent/:agentId/members/:workerId').delete(auth('manageUsers'), userController.removeAgentWorker);
 
 router
   .route('/:userId')

@@ -17,9 +17,11 @@ const getReportingChain = {
     userId: Joi.string().custom(objectId).required(),
   }),
 };
+const getDirectReports = { params: Joi.object({ managerId: Joi.string().custom(objectId).required() }), query: Joi.object({ role: Joi.string(), status: Joi.string(), branch: Joi.string().custom(objectId), department: Joi.string().custom(objectId), team: Joi.string().custom(objectId), search: Joi.string(), page: Joi.number().integer().min(1), limit: Joi.number().integer().min(1).max(100), sortBy: Joi.string() }) };
 
 module.exports = {
   getHierarchyTree,
   getHierarchyByRole,
   getReportingChain,
+  getDirectReports,
 };

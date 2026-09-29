@@ -1,6 +1,7 @@
 const httpStatus = require('http-status');
 const ApiError = require('../utils/ApiError');
 const User = require('../models/user.model');
+const { Branch } = require('../models');
 const Address = require('../models/address.model');
 const UserDocument = require('../models/userDocuments.model');
 const EmergencyContact = require('../models/emergencyContact.model');
@@ -8,6 +9,12 @@ const Commission = require('../models/commission.model');
 const EmployeeIds = require('../utils/employeeId');
 
 const createAgent = async (agentBody) => {
+  if (agentBody.agentId && await User.exists({ agentId: agentBody.agentId })) throw new ApiError(httpStatus.CONFLICT, 'Agent ID already exists');
+  const branchId = agentBody.workInformation?.branch;
+  if (branchId) {
+    const branch = await Branch.findOne({ _id: branchId, branchStatus: 'active' }).lean();
+    if (!branch) throw new ApiError(httpStatus.BAD_REQUEST, 'Active Branch is required');
+  }
   if (agentBody.email && (await User.isEmailTaken(agentBody.email))) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Email already taken');
   }

@@ -1,23 +1,24 @@
 const express = require('express');
 const branchController = require('../../controllers/branch.controller');
 const validate = require('../../middlewares/validate');
+const auth = require('../../middlewares/auth');
 const { branchValidation } = require('../../validations');
 
 const router = express.Router();
 
 router
   .route('/')
-  .post(validate(branchValidation.createBranch), branchController.createBranch)
-  .get(validate(branchValidation.getBranches), branchController.getBranches);
+  .post(auth('manageAttendance'), validate(branchValidation.createBranch), branchController.createBranch)
+  .get(auth('manageAttendance'), validate(branchValidation.getBranches), branchController.getBranches);
 
-router.route('/generate-id').get(branchController.generateBranchId);
+router.route('/generate-id').get(auth('manageAttendance'), branchController.generateBranchId);
 
-router.route('/dropdown').get(branchController.getBranchDropdown);
+router.route('/dropdown').get(auth('manageAttendance'), branchController.getBranchDropdown);
 
 router
   .route('/:branchId')
-  .get(validate(branchValidation.getBranch), branchController.getBranch)
-  .patch(validate(branchValidation.updateBranch), branchController.updateBranch)
-  .delete(validate(branchValidation.deleteBranch), branchController.deleteBranch);
+  .get(auth('manageAttendance'), validate(branchValidation.getBranch), branchController.getBranch)
+  .patch(auth('manageAttendance'), validate(branchValidation.updateBranch), branchController.updateBranch)
+  .delete(auth('manageAttendance'), validate(branchValidation.deleteBranch), branchController.deleteBranch);
 
 module.exports = router;

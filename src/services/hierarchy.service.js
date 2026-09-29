@@ -37,6 +37,8 @@ const NODE_SELECT = {
   role: 1,
   'workInformation.designation': 1,
   'workInformation.department': 1,
+  'workInformation.branch': 1,
+  'workInformation.team': 1,
   'workInformation.reportingPerson': 1,
 };
 
@@ -56,6 +58,8 @@ const buildNode = (user, children = []) => ({
       ? user.workInformation.department.departmentName
       : null
     : null,
+  branch: user.workInformation?.branch?.branchName || null,
+  team: user.workInformation?.team?.teamName || null,
   reportingPersonId: toStr(user.workInformation?.reportingPerson) || null,
   children,
 });
@@ -238,8 +242,22 @@ const getReportingChain = async (userId) => {
   return { chain, depth: chain.length };
 };
 
+const getDirectReports = async (managerId, filters = {}, options = {}) => {
+  const q = { 'workInformation.reportingPerson': new mongoose.Types.ObjectId(managerId), isDeleted: { $ne: true } };
+  if (filters.role) q.role = filters.role;
+  if (filters.status) q.isActive = filters.status;
+  if (filters.search) q.$or = [{ name: { $regex: filters.search, $options: 'i' } }, { employeeId: { $regex: filters.search, $options: 'i' } }];
+  if (filters.branch) q['workInformation.branch'] = new mongoose.Types.ObjectId(filters.branch);
+  if (filters.department) q['workInformation.department'] = new mongoose.Types.ObjectId(filters.department);
+  if (filters.team) q['workInformation.team'] = new mongoose.Types.ObjectId(filters.team);
+  const limit = Math.min(Number(options.limit) || 10, 100); const page = Math.max(Number(options.page) || 1, 1);
+  const [totalResults, rows] = await Promise.all([User.countDocuments(q), User.find(q, NODE_SELECT).sort(options.sortBy || 'name').skip((page - 1) * limit).limit(limit).lean()]);
+  return { results: rows.map((row) => buildNode(row)), page, limit, totalPages: Math.ceil(totalResults / limit), totalResults };
+};
+
 module.exports = {
   getHierarchyTree,
   getHierarchyByRole,
   getReportingChain,
+  getDirectReports,
 };

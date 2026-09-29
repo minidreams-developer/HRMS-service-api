@@ -12,6 +12,10 @@ const DEPT_CODE_KEY = 'departmentCode';
  * @returns {Promise<Department>}
  */
 const createDepartment = async (body) => {
+  const branch = await require('../models').Branch.findOne({ _id: body.branchId, branchStatus: 'active' }).lean();
+  if (!branch) throw new ApiError(httpStatus.BAD_REQUEST, 'Active Branch is required');
+  const duplicate = await Department.findOne({ branchId: body.branchId, $or: [{ departmentCode: body.departmentCode }, { departmentName: { $regex: `^${String(body.departmentName).replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}$`, $options: 'i' } }] }).lean();
+  if (duplicate) throw new ApiError(httpStatus.CONFLICT, 'Department already exists in this branch');
   const department = await Department.create(body);
   if (body.departmentCode && body.departmentCode === getPending(DEPT_CODE_KEY)) {
     clearPending(DEPT_CODE_KEY);
@@ -26,7 +30,11 @@ const createDepartment = async (body) => {
  * @returns {Promise<QueryResult>}
  */
 const queryDepartments = async (filter, options) => {
-  const result = await Department.paginate(filter, options);
+  const query = { ...filter };
+  if (filter.branchId) query.branchId = filter.branchId;
+  if (filter.search) query.$or = [{ departmentName: { $regex: filter.search, $options: 'i' } }, { departmentCode: { $regex: filter.search, $options: 'i' } }];
+  if (filter.isActive !== undefined) query.isActive = filter.isActive;
+  const result = await Department.paginate(query, options);
   await Department.populate(result.results, { path: 'departmentHead', select: 'name email employeeId' });
   return result;
 };
@@ -51,6 +59,14 @@ const updateDepartmentById = async (id, updateBody) => {
   if (!department) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Department not found');
   }
+  if (department.isActive === false) throw new ApiError(httpStatus.BAD_REQUEST, 'Inactive Department cannot receive assignments');
+  const branchId = updateBody.branchId || department.branchId;
+  const branch = await require('../models').Branch.findOne({ _id: branchId, branchStatus: 'active' }).lean();
+  if (!branch) throw new ApiError(httpStatus.BAD_REQUEST, 'Active Branch is required');
+  if (updateBody.departmentCode || updateBody.departmentName || updateBody.branchId) {
+    const duplicate = await Department.findOne({ _id: { $ne: id }, branchId, $or: [{ departmentCode: updateBody.departmentCode || department.departmentCode }, { departmentName: { $regex: `^${String(updateBody.departmentName || department.departmentName).replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}$`, $options: 'i' } }] }).lean();
+    if (duplicate) throw new ApiError(httpStatus.CONFLICT, 'Department already exists in this branch');
+  }
   Object.assign(department, updateBody);
   await department.save();
   return department;
@@ -66,7 +82,10 @@ const deleteDepartmentById = async (id) => {
   if (!department) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Department not found');
   }
-  await department.remove();
+  if (department.isActive === false) throw new ApiError(httpStatus.BAD_REQUEST, 'Inactive Department cannot receive assignments');
+  department.isActive = false;
+  department.deactivatedAt = new Date();
+  await department.save();
   return department;
 };
 
@@ -115,6 +134,9 @@ const addMemberToDepartment = async (departmentId, userId) => {
   if (!user) {
     throw new ApiError(httpStatus.NOT_FOUND, 'User not found');
   }
+  const userBranch = user.workInformation?.branch;
+  if (department.branchId && userBranch && String(userBranch) !== String(department.branchId)) throw new ApiError(httpStatus.BAD_REQUEST, 'User Branch does not match Department Branch');
+  if (department.branchId && !userBranch) throw new ApiError(httpStatus.BAD_REQUEST, 'User Branch is required for this Department');
 
   const alreadyMember = department.departmentEmployees.some(
     (emp) => emp.toString() === userId.toString()
@@ -149,6 +171,7 @@ const addTeamToDepartment = async (departmentId, teamId) => {
   if (!team) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Team not found');
   }
+  if (department.isActive === false) throw new ApiError(httpStatus.BAD_REQUEST, 'Inactive Department cannot receive assignments');
 
   const alreadyAdded = department.departmentTeams.some(
     (t) => t.toString() === teamId.toString()

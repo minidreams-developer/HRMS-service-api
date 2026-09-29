@@ -1,6 +1,6 @@
 const httpStatus = require('http-status');
 const mongoose = require('mongoose');
-const { OffBoard } = require('../models');
+const { OffBoard, User } = require('../models');
 const ApiError = require('../utils/ApiError');
 const tokenService = require('./token.service');
 const emailService = require('./email.service');
@@ -10,8 +10,18 @@ const emailService = require('./email.service');
  * @param {Object} body
  * @returns {Promise<OffBoard>}
  */
-const createOffBoard = async (body) => {
-  return OffBoard.create(body);
+const createOffBoard = async (body, actorId) => {
+  const user = await User.findById(body.userId).lean();
+  if (!user || user.isDeleted) throw new ApiError(httpStatus.BAD_REQUEST, 'User not found or deleted');
+  if (!['employee', 'staff', 'agent'].includes(user.role)) throw new ApiError(httpStatus.BAD_REQUEST, 'Offboarding is not supported for this User role');
+  if (user.isActive === 'Relieved') throw new ApiError(httpStatus.CONFLICT, 'User is already Relieved');
+  const active = await OffBoard.exists({ userId: body.userId, status: { $in: ['draft', 'pendingApproval', 'approved'] }, isDeleted: { $ne: true } });
+  if (active) throw new ApiError(httpStatus.CONFLICT, 'Active OffBoard record already exists for this User');
+  const info = body.exitInformation || {};
+  const resignationDate = info.resignationSubmitionDate || info.resignationSubmissionDate;
+  if (resignationDate && info.lastWorkingDate && new Date(info.lastWorkingDate) < new Date(resignationDate)) throw new ApiError(httpStatus.BAD_REQUEST, 'lastWorkingDate cannot be before resignation date');
+  if (info.resignationSubmissionDate && !info.resignationSubmitionDate) info.resignationSubmitionDate = info.resignationSubmissionDate;
+  return OffBoard.create({ ...body, status: 'pendingApproval', createdBy: actorId });
 };
 
 /**
@@ -29,7 +39,6 @@ const createOffBoard = async (body) => {
  * @returns {Promise<QueryResult>}
  */
 const queryOffBoards = async (filter, options) => {
-  const { User } = require('../models');
   const mongoFilter = {};
 
   // userId filter
@@ -55,6 +64,7 @@ const queryOffBoards = async (filter, options) => {
   if (filter.exitType) {
     mongoFilter['exitInformation.exitType'] = { $regex: filter.exitType, $options: 'i' };
   }
+  if (filter.status) mongoFilter.status = filter.status;
 
   // Last working date range
   if (filter.lastWorkingFrom || filter.lastWorkingTo) {
@@ -125,16 +135,17 @@ const getOffBoardById = async (id) => {
  * @returns {Promise<OffBoard>}
  */
 const getOffBoardByUserId = async (userId) => {
-  const record = await OffBoard.findOne({ userId })
+  const records = await OffBoard.find({ userId })
+    .sort({ createdAt: -1 })
     .populate('userId', 'name email employeeId')
     .populate('userDocuments');
 
-  if (record?.exitInformation?.exitApprovedBy &&
-    mongoose.Types.ObjectId.isValid(record.exitInformation.exitApprovedBy)) {
-    await record.populate('exitInformation.exitApprovedBy', 'name email');
+  for (const record of records) {
+    if (record?.exitInformation?.exitApprovedBy && mongoose.Types.ObjectId.isValid(record.exitInformation.exitApprovedBy)) {
+      await record.populate('exitInformation.exitApprovedBy', 'name email');
+    }
   }
-
-  return record;
+  return records;
 };
 
 /**
@@ -148,6 +159,9 @@ const updateOffBoardById = async (id, updateBody) => {
   if (!offBoard) {
     throw new ApiError(httpStatus.NOT_FOUND, 'OffBoard record not found');
   }
+  if (['approved', 'relieved', 'rejected', 'cancelled'].includes(offBoard.status)) throw new ApiError(httpStatus.CONFLICT, 'OffBoard record is no longer editable');
+  delete updateBody.status;
+  delete updateBody.userId;
   Object.assign(offBoard, updateBody);
   await offBoard.save();
   return offBoard;
@@ -158,13 +172,35 @@ const updateOffBoardById = async (id, updateBody) => {
  * @param {ObjectId} id
  * @returns {Promise<OffBoard>}
  */
-const deleteOffBoardById = async (id) => {
+const deleteOffBoardById = async (id, actorId) => {
   const offBoard = await getOffBoardById(id);
   if (!offBoard) {
     throw new ApiError(httpStatus.NOT_FOUND, 'OffBoard record not found');
   }
-  await offBoard.deleteOne();
+  if (!['draft', 'pendingApproval'].includes(offBoard.status)) throw new ApiError(httpStatus.CONFLICT, 'Only pending OffBoard records can be cancelled');
+  offBoard.status = 'cancelled'; offBoard.isDeleted = true; offBoard.deletedAt = new Date(); offBoard.cancelledAt = new Date(); offBoard.deletedBy = actorId; offBoard.cancelledBy = actorId;
+  await offBoard.save();
   return offBoard;
+};
+
+const updateOffBoardStatus = async (id, status, actorId, reason) => {
+  const record = await OffBoard.findById(id); if (!record) throw new ApiError(httpStatus.NOT_FOUND, 'OffBoard record not found');
+  const allowed = { draft: ['pendingApproval'], pendingApproval: ['approved', 'rejected'] };
+  if (!allowed[record.status]?.includes(status)) throw new ApiError(httpStatus.CONFLICT, `Cannot change OffBoard status from '${record.status}' to '${status}'`);
+  record.status = status;
+  if (status === 'approved') { record.exitInformation = record.exitInformation || {}; record.exitInformation.exitApprovedBy = actorId; record.exitInformation.approvalDate = new Date(); }
+  if (status === 'rejected') { record.rejectedBy = actorId; record.rejectedAt = new Date(); record.rejectionReason = reason; }
+  return record.save();
+};
+
+const finalizeOffBoard = async (id, actorId) => {
+  const record = await OffBoard.findById(id); if (!record) throw new ApiError(httpStatus.NOT_FOUND, 'OffBoard record not found');
+  if (record.status !== 'approved') throw new ApiError(httpStatus.CONFLICT, 'Only approved OffBoard records can be finalized');
+  const last = record.exitInformation?.lastWorkingDate ? new Date(record.exitInformation.lastWorkingDate) : null;
+  if (!last || new Date() < last) throw new ApiError(httpStatus.CONFLICT, 'Last working date has not been reached');
+  const user = await User.findById(record.userId); if (!user) throw new ApiError(httpStatus.NOT_FOUND, 'User not found');
+  user.isActive = 'Relieved'; user.workInformation = user.workInformation || {}; user.workInformation.relievedDate = new Date(); await user.save();
+  record.status = 'relieved'; record.updatedBy = actorId; return record.save();
 };
 
 /**
@@ -219,4 +255,6 @@ module.exports = {
   deleteOffBoardById,
   sendVerificationOtp,
   verifyEmailWithOtp,
+  updateOffBoardStatus,
+  finalizeOffBoard,
 };

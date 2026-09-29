@@ -31,6 +31,8 @@ const finalSettlement = Joi.object().keys({
 const createOffBoard = {
   body: Joi.object().unknown(true),
 };
+const updateStatus = { params: Joi.object({ offBoardId: Joi.string().custom(objectId).required() }), body: Joi.object({ status: Joi.string().valid('pendingApproval', 'approved', 'rejected').required(), reason: Joi.string().allow('').optional() }) };
+const finalize = { params: Joi.object({ offBoardId: Joi.string().custom(objectId).required() }) };
 
 const getOffBoards = {
   query: Joi.object().keys({
@@ -40,6 +42,7 @@ const getOffBoards = {
     search:          Joi.string().optional(),
     // exit type filter
     exitType:        Joi.string().optional(),
+    status:          Joi.string().valid('draft', 'pendingApproval', 'approved', 'rejected', 'relieved', 'cancelled').optional(),
     // last working date range
     lastWorkingFrom: Joi.date().iso().optional(),
     lastWorkingTo:   Joi.date().iso().optional(),
@@ -99,4 +102,6 @@ module.exports = {
   deleteOffBoard,
   sendOtp,
   verifyOtp,
+  updateStatus,
+  finalize,
 };

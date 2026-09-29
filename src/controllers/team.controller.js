@@ -10,7 +10,7 @@ const createTeam = catchAsync(async (req, res) => {
 });
 
 const getTeams = catchAsync(async (req, res) => {
-  const filter = pick(req.query, ['search', 'teamName', 'teamCode', 'teamLead', 'departmentId']);
+  const filter = pick(req.query, ['search', 'teamName', 'teamCode', 'teamLead', 'departmentId', 'isActive']);
   const options = pick(req.query, ['sortBy', 'limit', 'page']);
   const result = await teamService.queryTeams(filter, options);
   res.send(result);

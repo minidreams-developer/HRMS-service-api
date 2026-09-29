@@ -20,6 +20,9 @@ const teamSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Department",
     },
+    isActive: { type: Boolean, default: true },
+    deactivatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    deactivatedAt: Date,
     teamEmployees: {
       type: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
       default: [],

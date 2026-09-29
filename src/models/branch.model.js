@@ -18,6 +18,8 @@ const branchSchema = new mongoose.Schema(
       enum: ["active", "inactive"],
       default: "active",
     },
+    deactivatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    deactivatedAt: Date,
     effectiveFromDate: {
       type: Date,
     },

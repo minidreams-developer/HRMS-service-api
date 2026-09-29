@@ -29,3 +29,4 @@ module.exports.payrollController = require('./payroll.controller');
 module.exports.paysheetController = require('./paysheet.controller');
 module.exports.dashboardController = require('./dashboard.controller');
 module.exports.hierarchyController = require('./hierarchy.controller');
+module.exports.designationController = require('./designation.controller');

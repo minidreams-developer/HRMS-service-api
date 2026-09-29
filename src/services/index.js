@@ -34,3 +34,4 @@ module.exports.payrollService = require('./payroll.service');
 module.exports.paysheetService = require('./paysheet.service');
 module.exports.dashboardService = require('./dashboard.service');
 module.exports.hierarchyService = require('./hierarchy.service');
+module.exports.designationService = require('./designation.service');

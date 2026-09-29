@@ -5,12 +5,12 @@ const catchAsync = require('../utils/catchAsync');
 const { offBoardService } = require('../services');
 
 const createOffBoard = catchAsync(async (req, res) => {
-  const offBoard = await offBoardService.createOffBoard(req.body);
+  const offBoard = await offBoardService.createOffBoard(req.body, req.user._id);
   res.status(httpStatus.CREATED).send(offBoard);
 });
 
 const getOffBoards = catchAsync(async (req, res) => {
-  const filter  = pick(req.query, ['userId', 'search', 'exitType', 'lastWorkingFrom', 'lastWorkingTo']);
+  const filter  = pick(req.query, ['userId', 'search', 'exitType', 'status', 'lastWorkingFrom', 'lastWorkingTo']);
   const options = pick(req.query, ['sortBy', 'limit', 'page']);
   const result  = await offBoardService.queryOffBoards(filter, options);
   res.send(result);
@@ -38,7 +38,7 @@ const updateOffBoard = catchAsync(async (req, res) => {
 });
 
 const deleteOffBoard = catchAsync(async (req, res) => {
-  await offBoardService.deleteOffBoardById(req.params.offBoardId);
+  await offBoardService.deleteOffBoardById(req.params.offBoardId, req.user._id);
   res.status(httpStatus.NO_CONTENT).send();
 });
 
@@ -52,6 +52,16 @@ const verifyOtp = catchAsync(async (req, res) => {
   res.send(offBoard);
 });
 
+const updateStatus = catchAsync(async (req, res) => {
+  const offBoard = await offBoardService.updateOffBoardStatus(req.params.offBoardId, req.body.status, req.user._id, req.body.reason);
+  res.send(offBoard);
+});
+
+const finalizeOffBoard = catchAsync(async (req, res) => {
+  const offBoard = await offBoardService.finalizeOffBoard(req.params.offBoardId, req.user._id);
+  res.send(offBoard);
+});
+
 module.exports = {
   createOffBoard,
   getOffBoards,
@@ -61,4 +71,6 @@ module.exports = {
   deleteOffBoard,
   sendOtp,
   verifyOtp,
+  updateStatus,
+  finalizeOffBoard,
 };

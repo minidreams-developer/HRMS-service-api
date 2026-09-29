@@ -65,6 +65,7 @@ const createAgent = catchAsync(async (req, res) => {
     documentImage: documentData,
     commissionDetails:commissionData,
     referenceDetails:req.body.referenceDetails,
+    workInformation: { branch: req.body.branch || req.body.workInformation?.branch },
   };
 
   const agent = await agentService.createAgent(agentData);

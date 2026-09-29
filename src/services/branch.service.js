@@ -16,7 +16,10 @@ const isValidObjectId = (val) =>
  * @returns {Promise<Branch>}
  */
 const createBranch = async (body) => {
+  if (body.branchNumber && await Branch.exists({ branchNumber: body.branchNumber })) throw new ApiError(httpStatus.CONFLICT, 'Branch number already exists');
+  if (body.branchName && await Branch.exists({ branchName: { $regex: `^${String(body.branchName).replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}$`, $options: 'i' }, branchStatus: 'active' })) throw new ApiError(httpStatus.CONFLICT, 'Branch name already exists');
   const branch = await Branch.create(body);
+  if (body.departmentId) await Branch.updateOne({ _id: branch._id }, { $addToSet: { departments: body.departmentId } });
   if (body.branchNumber && body.branchNumber === getPending(BRANCH_CODE_KEY)) {
     clearPending(BRANCH_CODE_KEY);
   }
@@ -107,6 +110,7 @@ const updateBranchById = async (id, updateBody) => {
   if (!branch) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Branch not found');
   }
+  if (updateBody.branchNumber && await Branch.exists({ branchNumber: updateBody.branchNumber, _id: { $ne: id } })) throw new ApiError(httpStatus.CONFLICT, 'Branch number already exists');
   Object.assign(branch, updateBody);
   await branch.save();
   return branch;
@@ -122,7 +126,9 @@ const deleteBranchById = async (id) => {
   if (!branch) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Branch not found');
   }
-  await branch.remove();
+  branch.branchStatus = 'inactive';
+  branch.deactivatedAt = new Date();
+  await branch.save();
   return branch;
 };
 

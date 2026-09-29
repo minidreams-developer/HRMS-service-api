@@ -24,6 +24,7 @@ const ensureNoOverlap = async (employeeId, start, end, excludeId) => {
 const createOvertime = async (body, actor) => {
   const employee = await User.findById(body.employeeId).lean();
   if (!employee) throw new ApiError(httpStatus.NOT_FOUND, 'Employee not found');
+  if (employee.isActive !== 'Active') throw new ApiError(httpStatus.BAD_REQUEST, 'Relieved employee cannot create Overtime');
   if (!isManagement(actor) && String(body.employeeId) !== String(actor._id)) throw new ApiError(httpStatus.FORBIDDEN, 'Employees may only create their own overtime');
   const values = validateTimes(body);
   await ensureNoOverlap(body.employeeId, values.start, values.end);

@@ -46,6 +46,14 @@ describe('ROSTER-01 foundation', () => {
     await request(app).post('/v1/roster').set(headers).send(body).expect(httpStatus.CONFLICT);
   });
 
+  test('rejects relieved and inactive users for new roster assignments', async () => {
+    const headers = { Authorization: `Bearer ${token(admin)}` };
+    await User.updateOne({ _id: employee._id }, { isActive: 'Relieved' });
+    await request(app).post('/v1/roster').set(headers).send({ employeeId: employee._id, date: future(), shiftId: shift._id }).expect(httpStatus.BAD_REQUEST);
+    await User.updateOne({ _id: staff._id }, { isActive: 'Inactive' });
+    await request(app).post('/v1/roster').set(headers).send({ employeeId: staff._id, date: future(), shiftId: shift._id }).expect(httpStatus.BAD_REQUEST);
+  });
+
   test('supports update, cancellation, bulk assignment, and views', async () => {
     const headers = { Authorization: `Bearer ${token(admin)}` };
     const created = await request(app).post('/v1/roster').set(headers).send({ employeeId: employee._id, date: future(), shiftId: shift._id }).expect(httpStatus.CREATED);

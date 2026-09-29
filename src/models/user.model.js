@@ -157,6 +157,7 @@ const userSchema = mongoose.Schema(
       SalaryDetails: { type: mongoose.Schema.Types.ObjectId, ref: "SalaryDetails" },
       userRemarks: { type: String },
       designation: { type: String, default: "employee" },
+      designationId: { type: mongoose.Schema.Types.ObjectId, ref: 'Designation' },
       companyName: { type: String, trim: true },
       specialty: { type: String, trim: true },
       LicenseNo: { type: String, trim: true },

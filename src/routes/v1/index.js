@@ -34,6 +34,7 @@ const faceRoute = require('./face.route');
 const permissionRoute = require('./permission.route');
 const shiftAssignmentRoute = require('./shiftAssignment.route');
 const dayOffRoute = require('./dayOff.route');
+const designationRoute = require('./designation.route');
 
 const router = express.Router();
 
@@ -158,6 +159,7 @@ const defaultRoutes = [
     path: '/hierarchy',
     route: hierarchyRoute,
   },
+  { path: '/designations', route: designationRoute },
   {
     path: '/seriesConfiguration',
     route: seriesConfiguration,

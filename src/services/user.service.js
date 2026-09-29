@@ -1,5 +1,5 @@
 const httpStatus = require('http-status');
-const { User, Attendance, Address, BankDetails, SalaryDetails, Commission, Shift, ShiftAssignment } = require('../models');
+const { User, Attendance, Address, BankDetails, SalaryDetails, Commission, Shift, ShiftAssignment, Branch, Department, Team, Designation } = require('../models');
 const EmergencyContact = require('../models/emergencyContact.model');
 const UserDocument = require('../models/userDocuments.model');
 const ApiError = require('../utils/ApiError');
@@ -23,6 +23,67 @@ const validateShiftAssignment = async (shiftId) => {
   const shift = await Shift.findById(shiftId).lean();
   if (!shift) throw new ApiError(httpStatus.BAD_REQUEST, 'Shift not found');
   if (!shift.isShiftActive) throw new ApiError(httpStatus.BAD_REQUEST, 'Inactive Shift cannot be assigned to a new employee');
+};
+
+const refId = (value) => value && typeof value === 'object' && value._id ? value._id : value;
+const validatePeopleAssignment = async (workInformation = {}, currentUserId = null) => {
+  const branchId = refId(workInformation.branch);
+  const departmentId = refId(workInformation.department);
+  const teamId = refId(workInformation.team);
+  let branch = null; let department = null; let team = null;
+  if (workInformation.contractAgent) {
+    const agentId = refId(workInformation.contractAgent);
+    if (!isObjectId(agentId)) throw new ApiError(httpStatus.BAD_REQUEST, 'Agent must be a valid User reference for new assignments');
+    const agent = await User.findOne({ _id: agentId, role: 'agent', isDeleted: { $ne: true }, isActive: 'Active' }).lean();
+    if (!agent) throw new ApiError(httpStatus.BAD_REQUEST, 'Active Agent not found');
+    const agentBranch = refId(agent.workInformation?.branch);
+    if (!branchId || !agentBranch || String(branchId) !== String(agentBranch)) throw new ApiError(httpStatus.BAD_REQUEST, 'Agent and worker must belong to the same Branch');
+  }
+  if (workInformation.designationId) {
+    const designation = await Designation.findById(refId(workInformation.designationId)).lean();
+    if (!designation) throw new ApiError(httpStatus.BAD_REQUEST, 'Designation not found');
+    if (!designation.isActive) throw new ApiError(httpStatus.BAD_REQUEST, 'Inactive Designation cannot be assigned');
+  }
+  if (branchId && isObjectId(branchId)) {
+    branch = await Branch.findById(branchId).lean();
+    if (!branch) throw new ApiError(httpStatus.BAD_REQUEST, 'Branch not found');
+    if (branch.branchStatus === 'inactive') throw new ApiError(httpStatus.BAD_REQUEST, 'Inactive Branch cannot be assigned');
+  }
+  if (departmentId && isObjectId(departmentId)) {
+    department = await Department.findById(departmentId).lean();
+    if (!department) throw new ApiError(httpStatus.BAD_REQUEST, 'Department not found');
+    if (department.isActive === false) throw new ApiError(httpStatus.BAD_REQUEST, 'Inactive Department cannot be assigned');
+    if (department.branchId && branchId && String(department.branchId) !== String(branchId)) throw new ApiError(httpStatus.BAD_REQUEST, 'Department does not belong to the selected Branch');
+    if (department.branchId && !branchId) throw new ApiError(httpStatus.BAD_REQUEST, 'Branch is required for this Department');
+  }
+  if (teamId && isObjectId(teamId)) {
+    team = await Team.findById(teamId).lean();
+    if (!team) throw new ApiError(httpStatus.BAD_REQUEST, 'Team not found');
+    if (team.isActive === false) throw new ApiError(httpStatus.BAD_REQUEST, 'Inactive Team cannot be assigned');
+    if (department && String(team.department) !== String(department._id)) throw new ApiError(httpStatus.BAD_REQUEST, 'Team does not belong to the selected Department');
+    if (!department && team.department) throw new ApiError(httpStatus.BAD_REQUEST, 'Department is required for this Team');
+    const teamDepartment = team.department && await Department.findById(team.department).lean();
+    if (teamDepartment?.branchId && branchId && String(teamDepartment.branchId) !== String(branchId)) throw new ApiError(httpStatus.BAD_REQUEST, 'Team Department does not belong to the selected Branch');
+    if (teamDepartment?.branchId && !branchId) throw new ApiError(httpStatus.BAD_REQUEST, 'Branch is required for this Team');
+  }
+  if (workInformation.reportingPerson !== undefined && workInformation.reportingPerson !== null && workInformation.reportingPerson !== '') {
+    const managerId = refId(workInformation.reportingPerson);
+    if (!isObjectId(managerId)) throw new ApiError(httpStatus.BAD_REQUEST, 'Reporting manager must be a valid User');
+    if (currentUserId && String(managerId) === String(currentUserId)) throw new ApiError(httpStatus.BAD_REQUEST, 'User cannot report to self');
+    const manager = await User.findById(managerId).lean();
+    if (!manager) throw new ApiError(httpStatus.BAD_REQUEST, 'Reporting manager not found');
+    if (manager.isDeleted || manager.isActive !== 'Active') throw new ApiError(httpStatus.BAD_REQUEST, 'Reporting manager is inactive');
+    const managerBranch = refId(manager.workInformation?.branch);
+    if (!branchId || !managerBranch || !isObjectId(branchId) || String(managerBranch) !== String(branchId)) throw new ApiError(httpStatus.BAD_REQUEST, 'Reporting manager must belong to the same Branch');
+    const visited = new Set(); let cursor = manager;
+    for (let depth = 0; depth < 100 && cursor; depth += 1) {
+      const cursorId = String(cursor._id); if (visited.has(cursorId)) break; visited.add(cursorId);
+      if (currentUserId && cursorId === String(currentUserId)) throw new ApiError(httpStatus.BAD_REQUEST, 'Circular reporting relationship is not allowed');
+      const parent = refId(cursor.workInformation?.reportingPerson); if (!parent || !isObjectId(parent)) break;
+      cursor = await User.findById(parent).lean();
+    }
+  }
+  return true;
 };
 
 const EMP_ID_KEY  = 'employeeId';
@@ -166,6 +227,7 @@ const registerEmployee = async (body) => {
       SalaryDetails: salaryDetailsId,
       userRemarks: body.workInformation?.userRemarks,
       designation: body.workInformation?.designation || 'employee',
+      designationId: toObjectId(body.workInformation?.designationId),
       workExperience: body.workInformation?.workExperience,
       totalExperience: body.workInformation?.totalExperience,
       lastCompanyName: body.workInformation?.lastCompanyName,
@@ -175,6 +237,8 @@ const registerEmployee = async (body) => {
     },
     commissionDetails:commissionDetails,
   };
+
+  await validatePeopleAssignment(userData.workInformation);
 
   return User.create(userData).then(async (user) => {
     clearPending(EMP_ID_KEY);
@@ -223,6 +287,7 @@ const createUser = async (userBody) => {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Email already taken');
   }
   await validateShiftAssignment(toObjectId(userBody.workInformation?.shiftId));
+  await validatePeopleAssignment(userBody.workInformation);
   const user = await User.create(userBody);
   if (user.workInformation?.shiftId) await ShiftAssignment.create({ employeeId: user._id, shiftId: user.workInformation.shiftId, effectiveFrom: new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate())), reason: 'Initial employee assignment' });
   return user;
@@ -637,6 +702,7 @@ const updateUserById = async (userId, updateBody) => {
     if (wi.team)           wi.team           = toObjectId(wi.team);
     if (wi.shiftId)        wi.shiftId        = toObjectId(wi.shiftId);
     if (wi.reportingPerson) wi.reportingPerson = toObjectId(wi.reportingPerson);
+    if (wi.designationId) wi.designationId = toObjectId(wi.designationId);
     if (wi.contractAgent)  wi.contractAgent  = toObjectId(wi.contractAgent);
     // branch: only cast if it's a plain ObjectId string (not a full populated object)
     if (wi.branch && typeof wi.branch === 'string') wi.branch = toObjectId(wi.branch);
@@ -647,6 +713,12 @@ const updateUserById = async (userId, updateBody) => {
         : user.workInformation || {}),
       ...wi,
     };
+    await validatePeopleAssignment(updateBody.workInformation, user._id);
+    if (user.role === 'agent' && updateBody.workInformation.branch) {
+      const linked = await User.find({ 'workInformation.contractAgent': user._id, isDeleted: { $ne: true }, isActive: 'Active' }, { 'workInformation.branch': 1 }).lean();
+      const nextBranch = refId(updateBody.workInformation.branch);
+      if (linked.some((worker) => worker.workInformation?.branch && String(refId(worker.workInformation.branch)) !== String(nextBranch))) throw new ApiError(httpStatus.CONFLICT, 'Reassign linked workers before changing Agent Branch');
+    }
   }
 
   Object.assign(user, updateBody);
@@ -1107,6 +1179,10 @@ const getAgentMembers = async (agentId, options = {}, filters = {}) => {
   if (filters.status) {
     listFilter.isActive = filters.status; // 'Active' | 'In-Active' | 'Relieved'
   }
+  if (filters.branch) listFilter['workInformation.branch'] = isObjectId(filters.branch) ? new mongoose.Types.ObjectId(filters.branch) : filters.branch;
+  if (filters.department) listFilter['workInformation.department'] = isObjectId(filters.department) ? new mongoose.Types.ObjectId(filters.department) : filters.department;
+  if (filters.team) listFilter['workInformation.team'] = isObjectId(filters.team) ? new mongoose.Types.ObjectId(filters.team) : filters.team;
+  if (filters.search) listFilter.$or = [{ name: { $regex: filters.search, $options: 'i' } }, { employeeId: { $regex: filters.search, $options: 'i' } }];
 
   if (filters.joinedFrom || filters.joinedTo) {
     listFilter['workInformation.joinedDate'] = {};
@@ -1127,7 +1203,7 @@ const getAgentMembers = async (agentId, options = {}, filters = {}) => {
   const paginateResult = await User.paginate(listFilter, {
     limit,
     page,
-    sort: { createdAt: -1 },
+    sort: options.sortBy || { createdAt: -1 },
   });
 
   // Populate sub-documents
@@ -1151,6 +1227,32 @@ const getAgentMembers = async (agentId, options = {}, filters = {}) => {
   };
 };
 
+const assignAgentWorkers = async (agentId, workerIds) => {
+  const agent = await User.findOne({ $or: [{ _id: isObjectId(agentId) ? agentId : null }, { agentId }], role: 'agent', isDeleted: { $ne: true }, isActive: 'Active' }).lean();
+  if (!agent) throw new ApiError(httpStatus.BAD_REQUEST, 'Active Agent not found');
+  const ids = [...new Set((workerIds || []).map(String))];
+  const workers = await User.find({ _id: { $in: ids } }).lean();
+  if (workers.length !== ids.length) throw new ApiError(httpStatus.BAD_REQUEST, 'One or more workers not found');
+  for (const worker of workers) {
+    if (!['employee', 'staff'].includes(worker.role) || worker.isDeleted || worker.isActive !== 'Active') throw new ApiError(httpStatus.BAD_REQUEST, 'Only active employee/staff users can be assigned');
+    const existing = worker.workInformation?.contractAgent;
+    if (existing && String(existing?._id || existing) !== String(agent._id)) throw new ApiError(httpStatus.CONFLICT, 'Worker is already linked to another Agent');
+    const agentBranch = agent.workInformation?.branch; const workerBranch = worker.workInformation?.branch;
+    if (!agentBranch || !workerBranch || String(agentBranch?._id || agentBranch) !== String(workerBranch?._id || workerBranch)) throw new ApiError(httpStatus.BAD_REQUEST, 'Agent and worker must belong to the same Branch');
+  }
+  await User.updateMany({ _id: { $in: ids } }, { $set: { 'workInformation.contractAgent': agent._id } });
+  return getAgentMembers(agent._id, { page: 1, limit: 100 }, {});
+};
+
+const removeAgentWorker = async (agentId, workerId) => {
+  const agent = await User.findOne({ $or: [{ _id: isObjectId(agentId) ? agentId : null }, { agentId }], role: 'agent' }).lean();
+  const worker = await User.findById(workerId);
+  if (!agent || !worker) throw new ApiError(httpStatus.NOT_FOUND, 'Agent or worker not found');
+  const current = worker.workInformation?.contractAgent;
+  if (String(current?._id || current) !== String(agent._id)) throw new ApiError(httpStatus.CONFLICT, 'Worker is linked to another Agent');
+  worker.workInformation.contractAgent = null; await worker.save(); return worker;
+};
+
 module.exports = {
   registerEmployee,
   createUser,
@@ -1170,5 +1272,7 @@ module.exports = {
   getDistinctDepartments,
   getDistinctroles,
   getAgentMembers,
+  assignAgentWorkers,
+  removeAgentWorker,
   getUsersDropdown,
 };

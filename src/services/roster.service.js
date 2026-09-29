@@ -25,6 +25,7 @@ const getEligibleUser = async (employeeId, allowDeleted = false) => {
   const user = await User.findById(employeeId).lean();
   if (!user || (!allowDeleted && user.isDeleted === true)) throw new ApiError(httpStatus.NOT_FOUND, 'Employee or staff member not found');
   if (!['employee', 'staff'].includes(user.role)) throw new ApiError(httpStatus.BAD_REQUEST, 'Roster target must be an employee or staff member');
+  if (!allowDeleted && user.isActive !== 'Active') throw new ApiError(httpStatus.BAD_REQUEST, 'Inactive or relieved users cannot be assigned to a new roster');
   return user;
 };
 const getActiveShift = async (shiftId) => {

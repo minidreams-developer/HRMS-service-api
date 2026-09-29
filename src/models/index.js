@@ -32,3 +32,4 @@ module.exports.Payroll = require('./payroll.model');
 module.exports.Paysheet = require('./paysheet.model');
 module.exports.Roster = require('./roster.model');
 module.exports.Commission = require('./commission.model');
+module.exports.Designation = require('./designation.model');

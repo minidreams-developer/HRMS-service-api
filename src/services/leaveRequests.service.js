@@ -40,6 +40,7 @@ const getRequestDates = (body) => {
 const getEmployeeContext = async (employeeId) => {
   const employee = await User.findById(employeeId).lean();
   if (!employee) throw new ApiError(httpStatus.NOT_FOUND, 'Employee not found');
+  if (employee.isActive !== 'Active') throw new ApiError(httpStatus.BAD_REQUEST, 'Relieved employee cannot create Leave request');
   const shiftId = employee.workInformation?.shiftId;
   const shift = shiftId && isObjectId(shiftId) ? await Shift.findById(shiftId).lean() : null;
   return { employee, shift };

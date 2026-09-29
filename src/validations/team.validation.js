@@ -9,6 +9,7 @@ const createTeam = {
     teamLead: Joi.string().custom(objectId).allow('').optional(),
     department: Joi.string().custom(objectId).allow('').optional(),
     teamEmployees: Joi.array().items(Joi.string().custom(objectId)).optional(),
+    isActive: Joi.boolean().optional(),
   }).unknown(true),
 };
 
@@ -21,6 +22,7 @@ const getTeams = {
     teamCode:     Joi.string().optional(),
     teamLead:     Joi.string().optional(),
     departmentId: Joi.string().custom(objectId).optional(),
+    isActive: Joi.boolean().optional(),
     // pagination & sorting
     sortBy:       Joi.string().optional(),
     limit:        Joi.number().integer().min(1).optional(),
@@ -46,6 +48,7 @@ const updateTeam = {
       teamLead: Joi.string().custom(objectId).allow(''),
       department: Joi.string().custom(objectId).allow(''),
       teamEmployees: Joi.array().items(Joi.string().custom(objectId)),
+      isActive: Joi.boolean(),
     })
     .unknown(true)
     .min(1),

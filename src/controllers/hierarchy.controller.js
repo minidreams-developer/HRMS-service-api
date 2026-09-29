@@ -1,5 +1,6 @@
 const catchAsync = require('../utils/catchAsync');
 const { hierarchyService } = require('../services');
+const getDirectReports = catchAsync(async (req, res) => res.send(await hierarchyService.getDirectReports(req.params.managerId, req.query, req.query)));
 
 /**
  * GET /v1/hierarchy/tree
@@ -35,4 +36,5 @@ module.exports = {
   getHierarchyTree,
   getHierarchyByRole,
   getReportingChain,
+  getDirectReports,
 };

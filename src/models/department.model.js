@@ -12,6 +12,10 @@ const departmentSchema = new mongoose.Schema(
     departmentCode: {
       type: String,
     },
+    branchId: { type: mongoose.Schema.Types.ObjectId, ref: 'Branch' },
+    isActive: { type: Boolean, default: true },
+    deactivatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    deactivatedAt: Date,
     departmentHead: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",

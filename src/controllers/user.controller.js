@@ -246,12 +246,16 @@ const getEmployeeByEmpId = catchAsync(async (req, res) => {
 
 const getAgentMembers = catchAsync(async (req, res) => {
   const { agentId } = req.params;
-  const options = pick(req.query, ['page', 'limit']);
+  const options = pick(req.query, ['page', 'limit', 'sortBy']);
   const filters = {
     status:     req.query.status     || null,
     joinedFrom: req.query.joinedFrom || null,
     joinedTo:   req.query.joinedTo   || null,
     role:       req.query.role       || null,  // optionally scope to 'employee' or 'staff' only
+    branch:     req.query.branch || req.query.branchId || null,
+    department: req.query.department || req.query.departmentId || null,
+    team:       req.query.team || req.query.teamId || null,
+    search:     req.query.search || null,
   };
   const result = await userService.getAgentMembers(agentId, options, filters);
   res.send(result);
@@ -282,6 +286,9 @@ const getUsersDropdown = catchAsync(async (req, res) => {
   const users = await userService.getUsersDropdown(filters);
   res.send(users);
 });
+
+const assignAgentWorkers = catchAsync(async (req, res) => res.send(await userService.assignAgentWorkers(req.params.agentId, req.body.workerIds)));
+const removeAgentWorker = catchAsync(async (req, res) => { await userService.removeAgentWorker(req.params.agentId, req.params.workerId); res.status(httpStatus.NO_CONTENT).send(); });
 
 /**
  * PATCH /v1/users/:userId/documents/:documentId
@@ -330,4 +337,6 @@ module.exports = {
   getEmployeeByEmpId,
   getAgentMembers,
   getUsersDropdown,
+  assignAgentWorkers,
+  removeAgentWorker,
 };

@@ -10,6 +10,8 @@ const overlaps = (aStart, aEnd, bStart, bEnd) => aStart <= bEnd && (!aEnd || aEn
 const assignShift = async (body, actor) => {
   const employee = await User.findById(body.employeeId).lean();
   if (!employee) throw new ApiError(httpStatus.NOT_FOUND, 'Employee not found');
+  if (employee.isDeleted === true) throw new ApiError(httpStatus.NOT_FOUND, 'Employee not found');
+  if (employee.isActive !== 'Active') throw new ApiError(httpStatus.BAD_REQUEST, 'Inactive or relieved users cannot receive a new ShiftAssignment');
   const shift = await Shift.findById(body.shiftId).lean();
   if (!shift) throw new ApiError(httpStatus.NOT_FOUND, 'Shift not found');
   if (!shift.isShiftActive) throw new ApiError(httpStatus.BAD_REQUEST, 'Inactive Shift cannot be assigned');

@@ -168,6 +168,7 @@ const populateAttendance = async (docs) => {
 const createAttendance = async (body, actorId) => {
   const employee = await User.findById(body.employeeId).lean();
   if (!employee || employee.isDeleted === true) throw new ApiError(httpStatus.NOT_FOUND, 'Employee not found');
+  if (employee.isActive !== 'Active') throw new ApiError(httpStatus.BAD_REQUEST, 'Relieved employee cannot create Attendance');
   if (body.shiftId) {
     const explicitShift = await Shift.findById(body.shiftId).lean();
     if (!explicitShift) throw new ApiError(httpStatus.NOT_FOUND, 'Shift not found');

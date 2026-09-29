@@ -12,6 +12,10 @@ const TEAM_CODE_KEY = 'teamCode';
  * @returns {Promise<Team>}
  */
 const createTeam = async (body) => {
+  const department = body.department && await require('../models').Department.findOne({ _id: body.department, isActive: { $ne: false } }).lean();
+  if (!department) throw new ApiError(httpStatus.BAD_REQUEST, 'Active Department is required');
+  const duplicate = await Team.findOne({ department: body.department, $or: [{ teamCode: body.teamCode }, { teamName: { $regex: `^${String(body.teamName).replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}$`, $options: 'i' } }] }).lean();
+  if (duplicate) throw new ApiError(httpStatus.CONFLICT, 'Team already exists in this department');
   const team = await Team.create(body);
   // If the saved teamCode matches the pending one, clear it
   if (body.teamCode && body.teamCode === getPending(TEAM_CODE_KEY)) {
@@ -64,6 +68,7 @@ const queryTeams = async (filter, options) => {
   if (filter.departmentId) {
     mongoFilter.department = filter.departmentId;
   }
+  if (filter.isActive !== undefined) mongoFilter.isActive = filter.isActive;
 
   const result = await Team.paginate(mongoFilter, options);
   await Team.populate(result.results, { path: 'department', select: 'departmentName' });
@@ -128,6 +133,12 @@ const updateTeamById = async (id, updateBody) => {
   if (!team) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Team not found');
   }
+  const department = await require('../models').Department.findOne({ _id: updateBody.department || team.department, isActive: { $ne: false } }).lean();
+  if (!department) throw new ApiError(httpStatus.BAD_REQUEST, 'Active Department is required');
+  if (updateBody.teamCode || updateBody.teamName || updateBody.department) {
+    const duplicate = await Team.findOne({ _id: { $ne: id }, department: department._id, $or: [{ teamCode: updateBody.teamCode || team.teamCode }, { teamName: { $regex: `^${String(updateBody.teamName || team.teamName).replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}$`, $options: 'i' } }] }).lean();
+    if (duplicate) throw new ApiError(httpStatus.CONFLICT, 'Team already exists in this department');
+  }
   Object.assign(team, updateBody);
   await team.save();
   return team;
@@ -143,7 +154,9 @@ const deleteTeamById = async (id) => {
   if (!team) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Team not found');
   }
-  await team.deleteOne();
+  team.isActive = false;
+  team.deactivatedAt = new Date();
+  await team.save();
   return team;
 };
 
@@ -192,6 +205,7 @@ const addMemberToTeam = async (teamId, userId) => {
   if (!team) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Team not found');
   }
+  if (!team.isActive) throw new ApiError(httpStatus.BAD_REQUEST, 'Inactive Team cannot receive assignments');
 
   const user = await User.findById(userId);
   if (!user) {
@@ -200,6 +214,10 @@ const addMemberToTeam = async (teamId, userId) => {
   if (user.isDeleted) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Cannot assign a deleted user to a team');
   }
+  const userDepartment = user.workInformation?.department;
+  if (userDepartment && String(userDepartment) !== String(team.department)) throw new ApiError(httpStatus.BAD_REQUEST, 'User Department does not match Team Department');
+  const teamDepartment = await require('../models').Department.findById(team.department).lean();
+  if (teamDepartment?.branchId && user.workInformation?.branch && String(teamDepartment.branchId) !== String(user.workInformation.branch)) throw new ApiError(httpStatus.BAD_REQUEST, 'User Branch does not match Team Department Branch');
 
   // Check if user is already in the team
   const alreadyMember = team.teamEmployees.some(

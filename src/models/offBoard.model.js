@@ -5,6 +5,15 @@ const offBoardSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: "User"
     },
+    status: { type: String, enum: ['draft', 'pendingApproval', 'approved', 'rejected', 'relieved', 'cancelled'], default: 'pendingApproval' },
+    rejectedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    rejectedAt: Date,
+    rejectionReason: String,
+    cancelledBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    cancelledAt: Date,
+    isDeleted: { type: Boolean, default: false },
+    deletedAt: Date,
+    deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     exitInformation: {
         exitType: { type: String },
         exitReason: { type: String },
