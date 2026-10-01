@@ -294,17 +294,20 @@ const getQuickStats = async (date = new Date(), filters = {}) => {
  * @param {Date}   endDate
  * @param {object} filters  { branchId?, departmentId?, teamId? }
  */
-const getAttendanceOverview = async (endDate = new Date(), filters = {}) => {
-  // Build an array of 7 dates ending on endDate
+const getAttendanceOverview = async (endDate = new Date(), filters = {}, period = 'week') => {
+  const reference = new Date(endDate);
+  const lastDay = new Date(Date.UTC(reference.getUTCFullYear(), reference.getUTCMonth() + 1, 0));
+  const count = period === 'today' ? 1 : period === 'month' ? lastDay.getUTCDate() : 7;
+  // Build an array ending on the requested reference date (month starts at day 1).
   const dates = [];
-  for (let i = 6; i >= 0; i--) {
-    const d = new Date(endDate);
-    d.setUTCDate(d.getUTCDate() - i);
+  for (let i = count - 1; i >= 0; i--) {
+    const d = period === 'month' ? new Date(Date.UTC(reference.getUTCFullYear(), reference.getUTCMonth(), count - i)) : new Date(endDate);
+    if (period !== 'month') d.setUTCDate(d.getUTCDate() - i);
     dates.push(new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())));
   }
 
   const windowStart = dates[0];
-  const windowEnd   = new Date(dates[6].getTime() + 86399999);
+  const windowEnd   = new Date(dates[dates.length - 1].getTime() + 86399999);
 
   // Resolve filtered employee IDs once
   const filteredIds = await getFilteredEmployeeIds(filters);
@@ -374,15 +377,19 @@ const getAttendanceOverview = async (endDate = new Date(), filters = {}) => {
  * @param {number} year
  * @param {object} filters  { branchId?, departmentId?, teamId? }
  */
-const getPayrollBreakdown = async (month, year, filters = {}) => {
+const getPayrollBreakdown = async (month, year, filters = {}, period = 'month') => {
   const filteredIds = await getFilteredEmployeeIds(filters);
+  const range = period === 'today'
+    ? dayRange(new Date())
+    : period === 'week'
+      ? { start: new Date(Date.now() - 6 * 86400000), end: new Date() }
+      : null;
 
   const result = await Payroll.aggregate([
     {
       $match: {
         ...(filteredIds ? { employeeId: { $in: filteredIds } } : {}),
-        month,
-        year,
+        ...(range ? { createdAt: { $gte: range.start, $lte: range.end } } : { month, year }),
         status: { $in: ['processed', 'paid'] },
       },
     },
@@ -415,6 +422,9 @@ const getPayrollBreakdown = async (month, year, filters = {}) => {
     totalEarnings > 0 ? parseFloat(((val / totalEarnings) * 100).toFixed(1)) : 0;
 
   return {
+    period,
+    month,
+    year,
     totalPayThisMonth: totalPay,
     categories: {
       salary:     { amount: salary,     percentage: pct(salary) },
@@ -436,19 +446,12 @@ const getPayrollBreakdown = async (month, year, filters = {}) => {
  * @param {Date}   date
  * @param {object} filters  { branchId?, departmentId?, teamId? }
  */
-const getDashboard = async (date = new Date(), filters = {}) => {
+const getDashboard = async (date = new Date(), filters = {}, period = 'today') => {
   const d     = new Date(date);
   const month = d.getUTCMonth() + 1;
   const year  = d.getUTCFullYear();
 
-  // Resolve the filtered IDs once and reuse across all three sections
-  const filteredIds = await getFilteredEmployeeIds(filters);
-
-  const [quickStats, attendanceOverview, payrollBreakdown] = await Promise.all([
-    getQuickStats(d, filters),
-    getAttendanceOverview(d, filters),
-    getPayrollBreakdown(month, year, filters),
-  ]);
+  const quickStats = await getQuickStats(d, filters);
 
   return {
     meta: {
@@ -456,11 +459,10 @@ const getDashboard = async (date = new Date(), filters = {}) => {
       referenceDate: d.toISOString().split('T')[0],
       month,
       year,
+      period,
       filters: Object.keys(filters).length ? filters : undefined,
     },
     quickStats,
-    attendanceOverview,
-    payrollBreakdown,
   };
 };
 

@@ -13,6 +13,7 @@ const getBranches = catchAsync(async (req, res) => {
   const filter  = pick(req.query, ['search', 'branchName', 'branchNumber', 'branchStatus', 'branchType', 'city', 'state']);
   const options = pick(req.query, ['sortBy', 'limit', 'page']);
   const result  = await branchService.queryBranches(filter, options);
+  res.set('Cache-Control', 'no-store');
   res.send(result);
 });
 
@@ -21,11 +22,13 @@ const getBranch = catchAsync(async (req, res) => {
   if (!branch) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Branch not found');
   }
+  res.set('Cache-Control', 'no-store');
   res.send(branch);
 });
 
 const updateBranch = catchAsync(async (req, res) => {
   const branch = await branchService.updateBranchById(req.params.branchId, req.body);
+  console.log('Updated Branch:', branch);
   res.send(branch);
 });
 

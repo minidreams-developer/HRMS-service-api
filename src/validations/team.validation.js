@@ -69,6 +69,13 @@ const addMember = {
   }),
 };
 
+const removeMember = {
+  params: Joi.object().keys({
+    teamId: Joi.string().custom(objectId).required(),
+    userId: Joi.string().custom(objectId).required(),
+  }),
+};
+
 module.exports = {
   createTeam,
   getTeams,
@@ -76,4 +83,5 @@ module.exports = {
   updateTeam,
   deleteTeam,
   addMember,
+  removeMember,
 };

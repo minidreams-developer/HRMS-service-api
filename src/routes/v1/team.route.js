@@ -23,4 +23,8 @@ router
   .route('/:teamId/members')
   .post(auth('manageAttendance'), validate(teamValidation.addMember), teamController.addMember);
 
+router
+  .route('/:teamId/members/:userId')
+  .delete(auth('manageAttendance'), validate(teamValidation.removeMember), teamController.removeMember);
+
 module.exports = router;

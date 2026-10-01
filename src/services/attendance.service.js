@@ -546,20 +546,44 @@ const getEmployeeCalendar = async (employeeId, fromDate, toDate) => {
   });
 };
 
-const getPresentEmployeesToday = async (date = new Date(), role = null) => {
+const getPresentEmployeesToday = async (date = new Date(), role = null, filters = {}) => {
   const start = utcDay(date); const end = new Date(start.getTime() + 86400000);
   const rows = await Attendance.find({ $or: [
     { attendanceDay: { $gte: start, $lt: end } },
     { attendanceDay: { $exists: false }, date: { $gte: start, $lt: end } },
   ], loginTime: { $ne: null }, attendanceCategory: { $ne: 'absent' } }).sort({ loginTime: 1 }).lean();
   const employeeIds = rows.map((row) => row.employeeId).filter(Boolean);
-  const users = await User.find({ _id: { $in: employeeIds } }).select('name employeeId email role isActive workInformation.department workInformation.designation').lean();
+  const userQuery = { _id: { $in: employeeIds } };
+  if (role) userQuery.role = role;
+  if (filters.departmentId) {
+    const departmentValue = mongoose.Types.ObjectId.isValid(String(filters.departmentId))
+      ? [filters.departmentId, new mongoose.Types.ObjectId(filters.departmentId)]
+      : [filters.departmentId];
+    userQuery.$or = [
+      { 'workInformation.department': { $in: departmentValue } },
+      { 'workInformation.department._id': { $in: departmentValue } },
+    ];
+  }
+  const users = await User.find(userQuery).select('name employeeId email role isActive workInformation.department workInformation.designation').lean();
   const usersById = new Map(users.map((user) => [String(user._id), user]));
+  const shiftIds = rows.map((row) => {
+    const value = row.shiftId || row.shiftSnapshot?.shiftId;
+    return value && typeof value === 'object' ? value._id : value;
+  }).filter((value) => value && mongoose.Types.ObjectId.isValid(String(value)));
+  const shifts = await Shift.find({ _id: { $in: shiftIds } }).select('shiftName shiftCode shiftType timings weekOff minWorkingHours halfDayWorkingHours overtimeAfterHours').lean();
+  const shiftsById = new Map(shifts.map((shift) => [String(shift._id), shift]));
   return rows.map((row) => ({ row, employee: usersById.get(String(row.employeeId)) }))
+    .filter(({ row }) => {
+      if (!filters.shiftId) return true;
+      const value = row.shiftId || row.shiftSnapshot?.shiftId;
+      const idValue = value && typeof value === 'object' ? value._id : value;
+      return String(idValue) === String(filters.shiftId);
+    })
     .filter(({ employee }) => employee && ['employee', 'staff'].includes(employee.role) && (!role || employee.role === role))
     .map(({ row, employee }) => ({
     attendanceId: row._id, employee, date: row.attendanceDay || row.date, loginTime: row.loginTime, logoutTime: row.logoutTime,
     attendanceCategory: row.attendanceCategory, timingStatus: row.timingStatus || row.attendanceStatus, totalWorkedHours: row.totalWorkedHours || 0,
+    shift: shiftsById.get(String(row.shiftId || row.shiftSnapshot?.shiftId)) || row.shiftSnapshot || null,
   }));
 };
 

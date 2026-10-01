@@ -33,7 +33,11 @@ const getAttendance = catchAsync(async (req, res) => {
 
 const getPresentEmployeesToday = catchAsync(async (req, res) => {
   if (!managementRoles.has(req.user.role)) throw new ApiError(httpStatus.FORBIDDEN, 'Only management may view present employees');
-  res.send({ date: req.query.date || new Date().toISOString().slice(0, 10), role: req.query.role || 'employee,staff', results: await attendanceService.getPresentEmployeesToday(req.query.date, req.query.role) });
+  const filters = {
+    departmentId: req.query.departmentId || req.query.department,
+    shiftId: req.query.shiftId || req.query.shift,
+  };
+  res.send({ date: req.query.date || new Date().toISOString().slice(0, 10), role: req.query.role || 'employee,staff', filters, results: await attendanceService.getPresentEmployeesToday(req.query.date, req.query.role, filters) });
 });
 
 const getEmployeeAttendanceSummary = catchAsync(async (req, res) => {

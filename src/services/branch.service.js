@@ -1,6 +1,6 @@
 const httpStatus = require('http-status');
 const mongoose = require('mongoose');
-const { Branch } = require('../models');
+const { Branch, User } = require('../models');
 const ApiError = require('../utils/ApiError');
 const { generateBranchId } = require('../utils/employeeId');
 const { setPending, getPending, clearPending } = require('../utils/pendingCode');
@@ -82,6 +82,23 @@ const queryBranches = async (filter, options) => {
   if (toPopulate.length) {
     await Branch.populate(toPopulate, { path: 'branchHead', select: 'name' });
   }
+  const branchCounts = await Promise.all(result.results.map(async (branch) => {
+    const users = await User.countDocuments({
+      $or: [
+        { 'workInformation.branch': { $in: [branch._id, String(branch._id)] } },
+        { 'workInformation.branch._id': { $in: [branch._id, String(branch._id)] } },
+      ],
+      isDeleted: { $ne: true },
+    });
+    return [String(branch._id), users];
+  }));
+  const countMap = new Map(branchCounts);
+  result.results = result.results.map((branch) => {
+    const value = branch.toJSON ? branch.toJSON() : branch;
+    value.totalPeople = countMap.get(String(branch._id)) || 0;
+    value.totalEmployees = value.totalPeople;
+    return value;
+  });
   return result;
 };
 

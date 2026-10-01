@@ -44,6 +44,11 @@ const addMember = catchAsync(async (req, res) => {
   res.send(team);
 });
 
+const removeMember = catchAsync(async (req, res) => {
+  await teamService.removeMemberFromTeam(req.params.teamId, req.params.userId);
+  res.status(httpStatus.NO_CONTENT).send();
+});
+
 module.exports = {
   createTeam,
   getTeams,
@@ -52,4 +57,5 @@ module.exports = {
   deleteTeam,
   generateTeamId,
   addMember,
+  removeMember,
 };

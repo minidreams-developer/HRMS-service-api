@@ -37,4 +37,14 @@ describe('PEOPLEHUB-03 Agent management', () => {
     await User.updateOne({ _id: employee._id }, { 'workInformation.branch': otherBranch._id });
     await expect(userService.assignAgentWorkers(agent._id, [employee._id])).rejects.toThrow();
   });
+
+  test('allows optional agent branches and rejects only explicit mismatches', async () => {
+    const agent = await User.create({ _id: id(), name: 'Global Agent', email: `global-agent-${Date.now()}@x.test`, role: 'agent', agentId: `G-${Date.now()}`, isActive: 'Active' });
+    await User.updateOne({ _id: employee._id }, { 'workInformation.branch': branch._id });
+    await expect(userService.assignAgentWorkers(agent._id, [employee._id])).resolves.toBeDefined();
+    const otherBranch = await Branch.create({ branchName: 'Other Optional', branchNumber: `OO-${Date.now()}` });
+    const mismatched = await User.create({ _id: id(), name: 'Mismatched', email: `mismatch-${Date.now()}@x.test`, role: 'employee', workInformation: { branch: otherBranch._id } });
+    const branchedAgent = await User.create({ _id: id(), name: 'Branched Agent', email: `branched-agent-${Date.now()}@x.test`, role: 'agent', agentId: `BA-${Date.now()}`, isActive: 'Active', workInformation: { branch: branch._id } });
+    await expect(userService.assignAgentWorkers(branchedAgent._id, [mismatched._id])).rejects.toThrow('same Branch');
+  });
 });

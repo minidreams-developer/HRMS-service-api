@@ -1,5 +1,6 @@
 const httpStatus = require('http-status');
-const { Team, User } = require('../models');
+const mongoose = require('mongoose');
+const { Team, User, Department, Shift } = require('../models');
 const ApiError = require('../utils/ApiError');
 const { generateTeamId } = require('../utils/employeeId');
 const { setPending, getPending, clearPending } = require('../utils/pendingCode');
@@ -68,7 +69,9 @@ const queryTeams = async (filter, options) => {
   if (filter.departmentId) {
     mongoFilter.department = filter.departmentId;
   }
-  if (filter.isActive !== undefined) mongoFilter.isActive = filter.isActive;
+  // Exclude soft-deactivated teams by default. Pass isActive=false explicitly
+  // when management needs to view historical/deactivated teams.
+  mongoFilter.isActive = filter.isActive !== undefined ? filter.isActive : true;
 
   const result = await Team.paginate(mongoFilter, options);
   await Team.populate(result.results, { path: 'department', select: 'departmentName' });
@@ -95,8 +98,22 @@ const queryTeams = async (filter, options) => {
     if (row._id) countMap[String(row._id)] = row.count;
   }
 
+  const listedMemberIds = result.results.flatMap((team) => team.teamEmployees || []);
+  const memberDetails = await User.find({
+    $or: [
+      { 'workInformation.team': { $in: teamIds } },
+      { _id: { $in: listedMemberIds } },
+    ],
+    isDeleted: { $ne: true },
+  }).select('name employeeId email role isActive workInformation.joinedDate workInformation.shiftId workInformation.department workInformation.team').lean();
+
   result.results = result.results.map((team) => {
     const t = team.toJSON ? team.toJSON() : team;
+    t.members = memberDetails.filter((member) => {
+      const memberTeam = member.workInformation?.team;
+      return String(memberTeam?._id || memberTeam || '') === String(t.id || t._id)
+        || (t.teamEmployees || []).some((id) => String(id) === String(member._id));
+    });
     t.totalUsers = countMap[String(t.id)] || (Array.isArray(t.teamEmployees) ? t.teamEmployees.length : 0);
     return t;
   });
@@ -114,11 +131,31 @@ const getTeamById = async (id) => {
     .populate('teamLead', 'name');
   if (!team) return null;
   const t = team.toJSON();
-  const memberCount = await User.countDocuments({ 
-    'workInformation.team': team._id,
-    isDeleted: { $ne: true } // Exclude soft-deleted users
-  });
-  t.totalUsers = memberCount || (Array.isArray(t.teamEmployees) ? t.teamEmployees.length : 0);
+  const members = await User.find({
+    $or: [
+      { 'workInformation.team': team._id },
+      { _id: { $in: team.teamEmployees || [] } },
+    ],
+    isDeleted: { $ne: true },
+  }).select('name employeeId email role isActive workInformation.joinedDate workInformation.shiftId workInformation.department workInformation.team').lean();
+  const refId = (value) => value && typeof value === 'object' && value._id ? value._id : value;
+  const departmentIds = members.map((member) => refId(member.workInformation?.department)).filter((value) => value && mongoose.Types.ObjectId.isValid(String(value)));
+  const shiftIds = members.map((member) => refId(member.workInformation?.shiftId)).filter((value) => value && mongoose.Types.ObjectId.isValid(String(value)));
+  const [departments, shifts] = await Promise.all([
+    Department.find({ _id: { $in: departmentIds } }).select('departmentName departmentCode departmentDescription branchId').lean(),
+    Shift.find({ _id: { $in: shiftIds } }).select('shiftName shiftCode shiftType timings weekOff minWorkingHours halfDayWorkingHours overtimeAfterHours').lean(),
+  ]);
+  const departmentsById = new Map(departments.map((department) => [String(department._id), department]));
+  const shiftsById = new Map(shifts.map((shift) => [String(shift._id), shift]));
+  t.members = members.map((member) => ({
+    ...member,
+    workInformation: {
+      ...member.workInformation,
+      department: departmentsById.get(String(refId(member.workInformation?.department))) || member.workInformation?.department || null,
+      shiftId: shiftsById.get(String(refId(member.workInformation?.shiftId))) || member.workInformation?.shiftId || null,
+    },
+  }));
+  t.totalUsers = members.length || (Array.isArray(t.teamEmployees) ? t.teamEmployees.length : 0);
   return t;
 };
 
@@ -214,10 +251,13 @@ const addMemberToTeam = async (teamId, userId) => {
   if (user.isDeleted) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Cannot assign a deleted user to a team');
   }
-  const userDepartment = user.workInformation?.department;
+  const refId = (value) => value && typeof value === 'object' && value._id ? value._id : value;
+  const userDepartment = refId(user.workInformation?.department);
   if (userDepartment && String(userDepartment) !== String(team.department)) throw new ApiError(httpStatus.BAD_REQUEST, 'User Department does not match Team Department');
   const teamDepartment = await require('../models').Department.findById(team.department).lean();
-  if (teamDepartment?.branchId && user.workInformation?.branch && String(teamDepartment.branchId) !== String(user.workInformation.branch)) throw new ApiError(httpStatus.BAD_REQUEST, 'User Branch does not match Team Department Branch');
+  const userBranch = refId(user.workInformation?.branch);
+  const departmentBranch = refId(teamDepartment?.branchId);
+  if (departmentBranch && userBranch && String(departmentBranch) !== String(userBranch)) throw new ApiError(httpStatus.BAD_REQUEST, 'User Branch does not match Team Department Branch');
 
   // Check if user is already in the team
   const alreadyMember = team.teamEmployees.some(
@@ -239,6 +279,16 @@ const addMemberToTeam = async (teamId, userId) => {
   return team;
 };
 
+const removeMemberFromTeam = async (teamId, userId) => {
+  const team = await Team.findById(teamId);
+  if (!team) throw new ApiError(httpStatus.NOT_FOUND, 'Team not found');
+  const memberIndex = team.teamEmployees.findIndex((memberId) => String(memberId) === String(userId));
+  if (memberIndex === -1) throw new ApiError(httpStatus.NOT_FOUND, 'User is not a member of this team');
+  team.teamEmployees.splice(memberIndex, 1);
+  await team.save();
+  await User.updateOne({ _id: userId, 'workInformation.team': team._id }, { $unset: { 'workInformation.team': 1 } });
+};
+
 module.exports = {
   createTeam,
   queryTeams,
@@ -247,4 +297,5 @@ module.exports = {
   deleteTeamById,
   generateUniqueTeamId,
   addMemberToTeam,
+  removeMemberFromTeam,
 };

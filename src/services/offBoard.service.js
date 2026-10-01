@@ -1,6 +1,6 @@
 const httpStatus = require('http-status');
 const mongoose = require('mongoose');
-const { OffBoard, User } = require('../models');
+const { OffBoard, User, Asset } = require('../models');
 const ApiError = require('../utils/ApiError');
 const tokenService = require('./token.service');
 const emailService = require('./email.service');
@@ -118,15 +118,28 @@ const queryOffBoards = async (filter, options) => {
  */
 const getOffBoardById = async (id) => {
   const record = await OffBoard.findById(id)
-    .populate('userId', 'name email employeeId')
+    .populate('userId', 'name email employeeId role workInformation assets assetDetails')
     .populate('userDocuments');
+
+  let assetDetails = [];
+  if (record?.userId) {
+    await record.populate([
+      { path: 'userId.workInformation.department', select: 'departmentName departmentCode departmentDescription branchId' },
+      { path: 'userId.workInformation.team', select: 'teamName teamCode teamDescription department' },
+      { path: 'userId.workInformation.reportingPerson', select: 'name email employeeId role' },
+      { path: 'userId.workInformation.designationId', select: 'name code description' },
+      { path: 'userId.workInformation.shiftId', select: 'shiftName shiftCode shiftType timings weekOff minWorkingHours halfDayWorkingHours overtimeAfterHours' },
+    ]);
+    assetDetails = await Asset.find({ assignedTo: record.userId._id }).lean();
+  }
 
   if (record?.exitInformation?.exitApprovedBy &&
     mongoose.Types.ObjectId.isValid(record.exitInformation.exitApprovedBy)) {
     await record.populate('exitInformation.exitApprovedBy', 'name email');
   }
 
-  return record;
+  if (!record) return record;
+  return { ...record.toObject(), assetDetails };
 };
 
 /**
@@ -155,7 +168,7 @@ const getOffBoardByUserId = async (userId) => {
  * @returns {Promise<OffBoard>}
  */
 const updateOffBoardById = async (id, updateBody) => {
-  const offBoard = await getOffBoardById(id);
+  const offBoard = await OffBoard.findById(id);
   if (!offBoard) {
     throw new ApiError(httpStatus.NOT_FOUND, 'OffBoard record not found');
   }
@@ -173,7 +186,7 @@ const updateOffBoardById = async (id, updateBody) => {
  * @returns {Promise<OffBoard>}
  */
 const deleteOffBoardById = async (id, actorId) => {
-  const offBoard = await getOffBoardById(id);
+  const offBoard = await OffBoard.findById(id);
   if (!offBoard) {
     throw new ApiError(httpStatus.NOT_FOUND, 'OffBoard record not found');
   }

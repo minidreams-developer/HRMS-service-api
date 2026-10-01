@@ -37,7 +37,7 @@ const validatePeopleAssignment = async (workInformation = {}, currentUserId = nu
     const agent = await User.findOne({ _id: agentId, role: 'agent', isDeleted: { $ne: true }, isActive: 'Active' }).lean();
     if (!agent) throw new ApiError(httpStatus.BAD_REQUEST, 'Active Agent not found');
     const agentBranch = refId(agent.workInformation?.branch);
-    if (!branchId || !agentBranch || String(branchId) !== String(agentBranch)) throw new ApiError(httpStatus.BAD_REQUEST, 'Agent and worker must belong to the same Branch');
+    if (branchId && agentBranch && String(branchId) !== String(agentBranch)) throw new ApiError(httpStatus.BAD_REQUEST, 'Agent and worker must belong to the same Branch');
   }
   if (workInformation.designationId) {
     const designation = await Designation.findById(refId(workInformation.designationId)).lean();
@@ -218,7 +218,9 @@ const registerEmployee = async (body) => {
       experienceType: body.workInformation?.experienceType,
       department: toObjectId(body.workInformation?.department),
       team: toObjectId(body.workInformation?.team),
-      branch: toObjectId(body.workInformation?.branch),
+      // Onboarding clients may send branchId at the top level; persist it in
+      // the canonical workInformation.branch field used by branch filters.
+      branch: toObjectId(body.workInformation?.branch || body.branchId),
       contractAgent: toObjectId(body.workInformation?.contractAgent),
       reportingPerson: toObjectId(body.workInformation?.reportingPerson),
       AttendanceType: body.workInformation?.AttendanceType,
@@ -355,7 +357,12 @@ const queryUsers = async (filter, options, advancedFilters = {}) => {
 
   // Department filter — workInformation.department stores Mixed (ObjectId or object)
   if (advancedFilters.departmentId && isObjectId(advancedFilters.departmentId)) {
-    mongoFilter['workInformation.department'] = new mongoose.Types.ObjectId(advancedFilters.departmentId);
+    const departmentId = new mongoose.Types.ObjectId(advancedFilters.departmentId);
+    const clause = { $or: [
+      { 'workInformation.department': { $in: [departmentId, advancedFilters.departmentId] } },
+      { 'workInformation.department._id': { $in: [departmentId, advancedFilters.departmentId] } },
+    ] };
+    mongoFilter.$and = [...(mongoFilter.$and || []), clause];
   }
 
   // Team filter
@@ -378,7 +385,12 @@ const queryUsers = async (filter, options, advancedFilters = {}) => {
 
   // Shift filter
   if (advancedFilters.shiftId && isObjectId(advancedFilters.shiftId)) {
-    mongoFilter['workInformation.shiftId'] = new mongoose.Types.ObjectId(advancedFilters.shiftId);
+    const shiftId = new mongoose.Types.ObjectId(advancedFilters.shiftId);
+    const clause = { $or: [
+      { 'workInformation.shiftId': { $in: [shiftId, advancedFilters.shiftId] } },
+      { 'workInformation.shiftId._id': { $in: [shiftId, advancedFilters.shiftId] } },
+    ] };
+    mongoFilter.$and = [...(mongoFilter.$and || []), clause];
   }
 
   // Contract agent filter — supports both ObjectId and plain string like "agent_1"
@@ -1039,10 +1051,15 @@ const getEmployeeCount = async (filters = {}) => {
     baseQuery['workInformation.branch'] = toObjectId(filters.branchId);
   }
 
-  // "New this month" — joined in the current calendar month
+  // New employees — use the requested joined-date range when supplied;
+  // otherwise default to the current calendar month.
   const now = new Date();
-  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-  const monthEnd   = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0, 23, 59, 59, 999));
+  const monthStart = filters.joinedFrom
+    ? new Date(`${filters.joinedFrom}T00:00:00.000Z`)
+    : new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const monthEnd = filters.joinedTo
+    ? new Date(`${filters.joinedTo}T23:59:59.999Z`)
+    : new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0, 23, 59, 59, 999));
 
   const [total, active, inactive, relieved, newEmployees] = await Promise.all([
     User.countDocuments({ ...baseQuery }),
@@ -1237,8 +1254,8 @@ const assignAgentWorkers = async (agentId, workerIds) => {
     if (!['employee', 'staff'].includes(worker.role) || worker.isDeleted || worker.isActive !== 'Active') throw new ApiError(httpStatus.BAD_REQUEST, 'Only active employee/staff users can be assigned');
     const existing = worker.workInformation?.contractAgent;
     if (existing && String(existing?._id || existing) !== String(agent._id)) throw new ApiError(httpStatus.CONFLICT, 'Worker is already linked to another Agent');
-    const agentBranch = agent.workInformation?.branch; const workerBranch = worker.workInformation?.branch;
-    if (!agentBranch || !workerBranch || String(agentBranch?._id || agentBranch) !== String(workerBranch?._id || workerBranch)) throw new ApiError(httpStatus.BAD_REQUEST, 'Agent and worker must belong to the same Branch');
+    const agentBranch = refId(agent.workInformation?.branch); const workerBranch = refId(worker.workInformation?.branch);
+    if (agentBranch && workerBranch && String(agentBranch) !== String(workerBranch)) throw new ApiError(httpStatus.BAD_REQUEST, 'Agent and worker must belong to the same Branch');
   }
   await User.updateMany({ _id: { $in: ids } }, { $set: { 'workInformation.contractAgent': agent._id } });
   return getAgentMembers(agent._id, { page: 1, limit: 100 }, {});

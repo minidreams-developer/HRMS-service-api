@@ -10,6 +10,7 @@ const globalFilters = {
 const getDashboard = {
   query: Joi.object().keys({
     date: Joi.date().iso().optional(),
+    period: Joi.string().valid('today', 'week', 'month').default('today'),
     ...globalFilters,
   }),
 };
@@ -24,12 +25,14 @@ const getQuickStats = {
 const getAttendanceOverview = {
   query: Joi.object().keys({
     date: Joi.date().iso().optional(),
+    period: Joi.string().valid('today', 'week', 'month').default('week'),
     ...globalFilters,
   }),
 };
 
 const getPayrollBreakdown = {
   query: Joi.object().keys({
+    period: Joi.string().valid('today', 'week', 'month').default('month'),
     month: Joi.number().integer().min(1).max(12).optional(),
     year:  Joi.number().integer().min(2000).max(2100).optional(),
     ...globalFilters,

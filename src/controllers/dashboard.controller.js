@@ -21,7 +21,7 @@ const extractFilters = (query) => {
 const getDashboard = catchAsync(async (req, res) => {
   const date    = req.query.date ? new Date(req.query.date) : new Date();
   const filters = extractFilters(req.query);
-  const result  = await dashboardService.getDashboard(date, filters);
+  const result  = await dashboardService.getDashboard(date, filters, req.query.period || 'today');
   res.send(result);
 });
 
@@ -45,7 +45,7 @@ const getQuickStats = catchAsync(async (req, res) => {
 const getAttendanceOverview = catchAsync(async (req, res) => {
   const date    = req.query.date ? new Date(req.query.date) : new Date();
   const filters = extractFilters(req.query);
-  const result  = await dashboardService.getAttendanceOverview(date, filters);
+  const result  = await dashboardService.getAttendanceOverview(date, filters, req.query.period || 'week');
   res.send(result);
 });
 
@@ -58,7 +58,7 @@ const getPayrollBreakdown = catchAsync(async (req, res) => {
   const month   = parseInt(req.query.month, 10) || new Date().getMonth() + 1;
   const year    = parseInt(req.query.year,  10) || new Date().getFullYear();
   const filters = extractFilters(req.query);
-  const result  = await dashboardService.getPayrollBreakdown(month, year, filters);
+  const result  = await dashboardService.getPayrollBreakdown(month, year, filters, req.query.period || 'month');
   res.send(result);
 });
 
