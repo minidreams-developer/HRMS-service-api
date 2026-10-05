@@ -54,6 +54,7 @@ const getUsers = {
     teamId:       Joi.string().custom(objectId).optional(),
     branchId:     Joi.string().custom(objectId).optional(),
     designation:  Joi.string().optional(),
+    designationId: Joi.string().custom(objectId).optional(),
     shiftId:      Joi.string().custom(objectId).optional(),
     contractAgent: Joi.string().optional(),
 

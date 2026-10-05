@@ -2,7 +2,9 @@ const nodemailer = require('nodemailer');
 const config = require('../config/config');
 const logger = require('../config/logger');
 
-const transport = nodemailer.createTransport(config.email.smtp);
+// Tests must not create a real SMTP transport: importing the app should be
+// side-effect free and must not leave network handles open.
+const transport = nodemailer.createTransport(config.env === 'test' ? { jsonTransport: true } : config.email.smtp);
 /* istanbul ignore next */
 if (config.env !== 'test') {
   transport

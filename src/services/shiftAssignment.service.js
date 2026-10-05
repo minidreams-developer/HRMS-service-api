@@ -51,11 +51,23 @@ const getEmployeeShiftForDate = async (employeeId, date) => {
   }).sort({ effectiveFrom: -1, _id: -1 }).lean();
   if (assignment) {
     const shift = await Shift.findById(assignment.shiftId).lean();
-    if (shift) return shift;
+    if (shift) return resolveRotationalShift(shift, target);
   }
   const employee = await User.findById(normalizedEmployeeId).lean();
   const legacyShiftId = employee?.workInformation?.shiftId;
-  return legacyShiftId ? Shift.findById(legacyShiftId).lean() : null;
+  if (!legacyShiftId) return null;
+  const shift = await Shift.findById(legacyShiftId).lean();
+  return shift ? resolveRotationalShift(shift, target) : null;
+};
+
+const resolveRotationalShift = async (shift, targetDate) => {
+  if (shift.shiftType !== 'Rotational' || !shift.rotation?.shiftIds?.length) return shift;
+  const start = day(shift.rotation.effectiveStartDate);
+  const elapsedDays = Math.floor((day(targetDate) - start) / 86400000);
+  if (elapsedDays < 0) return null;
+  const duration = Number(shift.rotation.rotationDuration);
+  const index = Math.floor(elapsedDays / duration) % shift.rotation.shiftIds.length;
+  return Shift.findById(shift.rotation.shiftIds[index]).lean();
 };
 
 module.exports = { assignShift, getAssignmentById, getEmployeeAssignments, getEmployeeShiftForDate };

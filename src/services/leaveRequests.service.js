@@ -37,12 +37,11 @@ const getRequestDates = (body) => {
   return { start, end };
 };
 
-const getEmployeeContext = async (employeeId) => {
+const getEmployeeContext = async (employeeId, effectiveDate = new Date()) => {
   const employee = await User.findById(employeeId).lean();
   if (!employee) throw new ApiError(httpStatus.NOT_FOUND, 'Employee not found');
   if (employee.isActive !== 'Active') throw new ApiError(httpStatus.BAD_REQUEST, 'Relieved employee cannot create Leave request');
-  const shiftId = employee.workInformation?.shiftId;
-  const shift = shiftId && isObjectId(shiftId) ? await Shift.findById(shiftId).lean() : null;
+  const shift = employee?._id ? await getEmployeeShiftForDate(employee._id, effectiveDate) : null;
   return { employee, shift };
 };
 
@@ -161,8 +160,8 @@ const restoreBalance = async (leave) => {
  */
 const createLeaveRequests = async (body) => {
   const employeeId = isObjectId(body.employeeId) ? new mongoose.Types.ObjectId(body.employeeId) : body.employeeId;
-  const { shift } = await getEmployeeContext(employeeId);
   const dates = getRequestDates(body);
+  const { shift } = await getEmployeeContext(employeeId, dates.start);
   const payload = { ...body, employeeId, singleDate: null, startDate: null, endDate: null };
   if (body.singleDate) payload.singleDate = dates.start;
   else {

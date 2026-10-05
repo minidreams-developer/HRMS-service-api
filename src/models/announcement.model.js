@@ -27,6 +27,19 @@ const announcementSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    audience: {
+      roles: [{ type: String }],
+      branches: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Branch' }],
+      departments: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Department' }],
+      teams: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Team' }],
+      designations: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Designation' }],
+      users: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+    },
+    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    deactivatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    deactivatedAt: Date,
+    isActive: { type: Boolean, default: true },
     images: [
       {
         imgName: {

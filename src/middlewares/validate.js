@@ -11,6 +11,14 @@ const validate = (schema) => (req, res, next) => {
     .validate(object);
 
   if (error) {
+    if (req.baseUrl === '/v1/shifts') {
+      console.log('[shift validation] request body:', JSON.stringify(req.body, null, 2));
+      console.log('[shift validation] details:', error.details.map((detail) => ({
+        path: detail.path,
+        message: detail.message,
+        value: detail.context?.value,
+      })));
+    }
     const errorMessage = error.details.map((details) => details.message).join(', ');
     return next(new ApiError(httpStatus.BAD_REQUEST, errorMessage));
   }

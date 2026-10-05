@@ -10,9 +10,20 @@ const createOffBoard = catchAsync(async (req, res) => {
 });
 
 const getOffBoards = catchAsync(async (req, res) => {
-  const filter  = pick(req.query, ['userId', 'search', 'exitType', 'status', 'lastWorkingFrom', 'lastWorkingTo']);
+  const filter  = pick(req.query, ['userId', 'search', 'exitType', 'status', 'role', 'departmentId', 'lastWorkingFrom', 'lastWorkingTo']);
   const options = pick(req.query, ['sortBy', 'limit', 'page']);
   const result  = await offBoardService.queryOffBoards(filter, options);
+  res.send(result);
+});
+
+const getOffBoardSummary = catchAsync(async (req, res) => {
+  const result = await offBoardService.getOffBoardSummary({
+    exitType: req.query.exitType,
+    status: req.query.status,
+    range: req.query.range,
+    role: req.query.role,
+    departmentId: req.query.departmentId,
+  });
   res.send(result);
 });
 
@@ -65,6 +76,7 @@ const finalizeOffBoard = catchAsync(async (req, res) => {
 module.exports = {
   createOffBoard,
   getOffBoards,
+  getOffBoardSummary,
   getOffBoard,
   getOffBoardByUser,
   updateOffBoard,

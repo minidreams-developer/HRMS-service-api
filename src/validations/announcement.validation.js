@@ -12,8 +12,15 @@ const createAnnouncement = {
     description:         Joi.string().optional(),
     content:             Joi.string().optional(),
     scheduleDateAndTime: Joi.date().optional(),
-    // images is populated from req.files by the controller — not validated here
-  }).unknown(true),
+    audience: Joi.object({
+      roles: Joi.array().items(Joi.string()),
+      branches: Joi.array().items(Joi.string().custom(objectId)),
+      departments: Joi.array().items(Joi.string().custom(objectId)),
+      teams: Joi.array().items(Joi.string().custom(objectId)),
+      designations: Joi.array().items(Joi.string().custom(objectId)),
+      users: Joi.array().items(Joi.string().custom(objectId)),
+    }).optional(),
+  }).unknown(false),
 };
 
 const getAnnouncements = {
@@ -24,6 +31,7 @@ const getAnnouncements = {
     search:   Joi.string(),
     // status filter
     status:   Joi.string().valid('draft', 'scheduled', 'published').optional(),
+    isActive: Joi.boolean().optional(),
     // date range filter on scheduleDateAndTime
     fromDate: Joi.date().iso().optional(),
     toDate:   Joi.date().iso().optional().when('fromDate', {
@@ -55,6 +63,14 @@ const updateAnnouncement = {
       content:             Joi.string(),
       scheduleDateAndTime: Joi.date(),
       images:              Joi.array().items(imageSchema),
+      audience: Joi.object({
+        roles: Joi.array().items(Joi.string()),
+        branches: Joi.array().items(Joi.string().custom(objectId)),
+        departments: Joi.array().items(Joi.string().custom(objectId)),
+        teams: Joi.array().items(Joi.string().custom(objectId)),
+        designations: Joi.array().items(Joi.string().custom(objectId)),
+        users: Joi.array().items(Joi.string().custom(objectId)),
+      }),
     })
     .min(1),
 };

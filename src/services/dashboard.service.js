@@ -1,5 +1,8 @@
 const mongoose = require('mongoose');
-const { User, Attendance, LeaveRequests, Overtime, Payroll } = require('../models');
+const { User, Attendance, LeaveRequests, Overtime, Payroll, Branch, Department, Team } = require('../models');
+const ApiError = require('../utils/ApiError');
+const managementRoles = new Set(['admin', 'subAdmin', 'manager', 'hr_manager']);
+const workforceRoles = ['employee', 'staff', 'agent', 'manager', 'hr_manager', 'team_lead'];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
@@ -52,7 +55,7 @@ const ddmm = (date) => {
  */
 const buildUserFilterQuery = (filters = {}) => {
   const query = { 
-    role: { $ne: 'admin' }, 
+    role: { $in: workforceRoles },
     isActive: 'Active',
     isDeleted: { $ne: true } // Exclude soft-deleted users
   };
@@ -85,6 +88,36 @@ const buildUserFilterQuery = (filters = {}) => {
   }
 
   return query;
+};
+
+const refId = (value) => value && typeof value === 'object' ? (value._id || value.id) : value;
+const validId = (value) => mongoose.Types.ObjectId.isValid(value);
+
+const resolveDashboardFilters = async (actor, requested = {}) => {
+  if (!managementRoles.has(actor.role)) throw new ApiError(403, 'Forbidden');
+  const filters = { ...requested };
+  const managerBranch = refId(actor.workInformation?.branch);
+  if (actor.role === 'manager') {
+    if (!managerBranch || !validId(managerBranch)) throw new ApiError(403, 'Manager is not assigned to a Branch');
+    if (filters.branchId && String(filters.branchId) !== String(managerBranch)) throw new ApiError(403, 'Manager can only access their own Branch');
+    filters.branchId = String(managerBranch);
+  }
+  if (filters.branchId && !(await Branch.exists({ _id: filters.branchId }))) throw new ApiError(400, 'Branch not found');
+  if (filters.departmentId) {
+    const department = await Department.findById(filters.departmentId).lean();
+    if (!department) throw new ApiError(400, 'Department not found');
+    if (filters.branchId && department.branchId && String(department.branchId) !== String(filters.branchId)) throw new ApiError(403, 'Department is outside the allowed Branch');
+  }
+  if (filters.teamId) {
+    const team = await Team.findById(filters.teamId).lean();
+    if (!team) throw new ApiError(400, 'Team not found');
+    if (filters.departmentId && team.department && String(team.department) !== String(filters.departmentId)) throw new ApiError(400, 'Team does not belong to the selected Department');
+    if (filters.branchId && team.department) {
+      const department = await Department.findById(team.department).select('branchId').lean();
+      if (department?.branchId && String(department.branchId) !== String(filters.branchId)) throw new ApiError(403, 'Team is outside the allowed Branch');
+    }
+  }
+  return filters;
 };
 
 /**
@@ -138,6 +171,11 @@ const getQuickStats = async (date = new Date(), filters = {}) => {
   // ── Run all queries in parallel ───────────────────────────────────────────
   const [
     totalEmployees,
+    totalStaff,
+    totalActiveUsers,
+    totalInactiveUsers,
+    totalRelievedUsers,
+    newEmployees,
     prevTotalEmployees,
     presentToday,
     presentYesterday,
@@ -149,8 +187,12 @@ const getQuickStats = async (date = new Date(), filters = {}) => {
     payrollPrevious,
   ] = await Promise.all([
 
-    // 1. Total active employees (current)
-    User.countDocuments(baseUserQuery),
+    User.countDocuments({ ...baseUserQuery, role: 'employee', isActive: { $in: ['Active', 'In-Active', 'Relieved'] } }),
+    User.countDocuments({ ...baseUserQuery, role: 'staff', isActive: { $in: ['Active', 'In-Active', 'Relieved'] } }),
+    User.countDocuments({ ...baseUserQuery, isActive: 'Active' }),
+    User.countDocuments({ ...baseUserQuery, isActive: 'In-Active' }),
+    User.countDocuments({ ...baseUserQuery, isActive: 'Relieved' }),
+    User.countDocuments({ ...baseUserQuery, role: 'employee', isActive: { $in: ['Active', 'In-Active', 'Relieved'] }, 'workInformation.joinedDate': { $gte: mStart, $lte: mEnd } }),
 
     // 1. Total active employees (yesterday — proxy for "previous")
     User.countDocuments(prevUserQuery),
@@ -261,6 +303,11 @@ const getQuickStats = async (date = new Date(), filters = {}) => {
       percentageChange: pctChange(totalEmployees, prevTotalEmployees),
       trend: totalEmployees >= prevTotalEmployees ? 'up' : 'down',
     },
+    totalStaff: { count: totalStaff },
+    totalActiveUsers: { count: totalActiveUsers },
+    totalInactiveUsers: { count: totalInactiveUsers },
+    totalRelievedUsers: { count: totalRelievedUsers },
+    newEmployees: { count: newEmployees },
     presentToday: {
       count: presentToday.length,
       percentageChange: pctChange(presentToday.length, presentYesterday.length),
@@ -341,7 +388,7 @@ const getAttendanceOverview = async (endDate = new Date(), filters = {}, period 
     });
 
     const presentCount = dayAttendance.length;
-    const lateCount    = dayAttendance.filter((r) => r.attendanceStatus === 'arrivedLate').length;
+    const lateCount    = dayAttendance.filter((r) => r.timingStatus === 'arrivedLate').length;
 
     const onLeaveCount = leaveRecords.filter((leave) => {
       if (leave.singleDate) {
@@ -471,4 +518,5 @@ module.exports = {
   getQuickStats,
   getAttendanceOverview,
   getPayrollBreakdown,
+  resolveDashboardFilters,
 };

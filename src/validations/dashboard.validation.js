@@ -2,9 +2,9 @@ const Joi = require('joi');
 
 // Shared global filter keys applied to every dashboard endpoint
 const globalFilters = {
-  branchId:     Joi.string().optional(),
-  departmentId: Joi.string().optional(),
-  teamId:       Joi.string().optional(),
+  branchId:     Joi.string().custom(require('./custom.validation').objectId).optional(),
+  departmentId: Joi.string().custom(require('./custom.validation').objectId).optional(),
+  teamId:       Joi.string().custom(require('./custom.validation').objectId).optional(),
 };
 
 const getDashboard = {

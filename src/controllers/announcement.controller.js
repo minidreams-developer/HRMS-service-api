@@ -27,7 +27,7 @@ const createAnnouncement = catchAsync(async (req, res) => {
     body.images = [...existingImages, ...uploadedImages];
   }
 
-  const announcement = await announcementService.createAnnouncement(body);
+  const announcement = await announcementService.createAnnouncement(body, req.user._id);
   res.status(httpStatus.CREATED).send(announcement);
 });
 
@@ -36,7 +36,7 @@ const createAnnouncement = catchAsync(async (req, res) => {
  * Supports: title, search, fromDate, toDate, status, sortBy, limit, page
  */
 const getAnnouncements = catchAsync(async (req, res) => {
-  const filter  = pick(req.query, ['title', 'search', 'fromDate', 'toDate', 'status']);
+  const filter  = pick(req.query, ['title', 'search', 'fromDate', 'toDate', 'status', 'isActive']);
   const options = pick(req.query, ['sortBy', 'limit', 'page']);
   const result  = await announcementService.queryAnnouncements(filter, options);
   res.send(result);
@@ -57,7 +57,7 @@ const getAnnouncement = catchAsync(async (req, res) => {
  * PATCH /announcements/:announcementId
  */
 const updateAnnouncement = catchAsync(async (req, res) => {
-  const announcement = await announcementService.updateAnnouncementById(req.params.announcementId, req.body);
+  const announcement = await announcementService.updateAnnouncementById(req.params.announcementId, req.body, req.user._id);
   res.send(announcement);
 });
 
@@ -84,7 +84,7 @@ const scheduleAnnouncement = catchAsync(async (req, res) => {
 
   const announcement = await announcementService.updateAnnouncementById(
     req.params.announcementId,
-    { scheduleDateAndTime: scheduled }
+    { scheduleDateAndTime: scheduled }, req.user._id
   );
 
   res.send(announcement);
@@ -94,7 +94,7 @@ const scheduleAnnouncement = catchAsync(async (req, res) => {
  * DELETE /announcements/:announcementId
  */
 const deleteAnnouncement = catchAsync(async (req, res) => {
-  await announcementService.deleteAnnouncementById(req.params.announcementId);
+  await announcementService.deleteAnnouncementById(req.params.announcementId, req.user._id);
   res.status(httpStatus.NO_CONTENT).send();
 });
 
@@ -115,7 +115,8 @@ const addImages = catchAsync(async (req, res) => {
 
   const announcement = await announcementService.addImagesToAnnouncement(
     req.params.announcementId,
-    images
+    images,
+    req.user._id
   );
   res.send(announcement);
 });
@@ -127,8 +128,21 @@ const addImages = catchAsync(async (req, res) => {
 const removeImage = catchAsync(async (req, res) => {
   const announcement = await announcementService.removeImageFromAnnouncement(
     req.params.announcementId,
-    req.params.imgName
+    req.params.imgName,
+    req.user._id
   );
+  res.send(announcement);
+});
+
+const getMyAnnouncements = catchAsync(async (req, res) => {
+  const filter = pick(req.query, ['search', 'fromDate', 'toDate']);
+  const options = pick(req.query, ['sortBy', 'limit', 'page']);
+  res.send(await announcementService.getAnnouncementsForUser(req.user, filter, options));
+});
+
+const getMyAnnouncement = catchAsync(async (req, res) => {
+  const announcement = await announcementService.getAnnouncementById(req.params.announcementId);
+  if (!announcement || !announcementService.canUserView(announcement, req.user)) throw new ApiError(httpStatus.NOT_FOUND, 'Announcement not found');
   res.send(announcement);
 });
 
@@ -141,4 +155,6 @@ module.exports = {
   deleteAnnouncement,
   addImages,
   removeImage,
+  getMyAnnouncements,
+  getMyAnnouncement,
 };

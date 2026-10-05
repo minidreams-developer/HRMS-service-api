@@ -1,12 +1,12 @@
 const allRoles = {
   employee: [],
-  hr_manager: ['manageDayOffHolidays', 'manageAttendance'],
+  hr_manager: ['manageDayOffHolidays', 'manageAttendance', 'manageAnnouncements'],
   team_lead: [],
   agent: [],
   staff:    [],
-  manager:  ['getUsers', 'manageDayOffHolidays', 'manageAttendance'],
-  subAdmin: ['getUsers', 'manageUsers', 'manageDayOffHolidays', 'manageAttendance'],
-  admin:    ['getUsers', 'manageUsers', 'manageDayOffHolidays', 'manageAttendance'],
+  manager:  ['getUsers', 'manageDayOffHolidays', 'manageAttendance', 'manageAnnouncements'],
+  subAdmin: ['getUsers', 'manageUsers', 'manageDayOffHolidays', 'manageAttendance', 'manageAnnouncements'],
+  admin:    ['getUsers', 'manageUsers', 'manageDayOffHolidays', 'manageAttendance', 'manageAnnouncements'],
   contractor:[],
 };
 

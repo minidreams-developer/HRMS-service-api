@@ -66,6 +66,18 @@ const queryOffBoards = async (filter, options) => {
   }
   if (filter.status) mongoFilter.status = filter.status;
 
+  if (filter.role || filter.departmentId) {
+    const userFilter = {};
+    if (filter.role) userFilter.role = filter.role;
+    if (filter.departmentId) {
+      const departmentValues = [filter.departmentId];
+      if (mongoose.Types.ObjectId.isValid(filter.departmentId)) departmentValues.push(new mongoose.Types.ObjectId(filter.departmentId));
+      userFilter['workInformation.department'] = { $in: departmentValues };
+    }
+    const users = await User.find(userFilter, { _id: 1 }).lean();
+    mongoFilter.userId = { $in: users.map((user) => user._id) };
+  }
+
   // Last working date range
   if (filter.lastWorkingFrom || filter.lastWorkingTo) {
     mongoFilter['exitInformation.lastWorkingDate'] = {};
@@ -108,6 +120,80 @@ const queryOffBoards = async (filter, options) => {
     limit,
     totalPages: Math.ceil(total / limit),
     totalResults: total,
+  };
+};
+
+/**
+ * Return the summary cards used by the offboarding dashboard.
+ *
+ * Definitions:
+ * - inProgress: draft, pending approval, or approved records
+ * - pendingClearance: approved records awaiting the last working date/finalization
+ * - fnfPending: approved/relieved records with at least one incomplete settlement item
+ * - completed: relieved records
+ * - avgExitTime: average calendar days from resignation submission to relief
+ */
+const getOffBoardSummary = async (filter = {}) => {
+  const mongoFilter = { isDeleted: { $ne: true } };
+  if (filter.exitType) mongoFilter['exitInformation.exitType'] = { $regex: filter.exitType, $options: 'i' };
+  if (filter.status) mongoFilter.status = filter.status;
+  if (filter.range) {
+    const from = new Date();
+    from.setDate(from.getDate() - Number(filter.range));
+    mongoFilter.createdAt = { $gte: from };
+  }
+  if (filter.role || filter.departmentId) {
+    const userFilter = {};
+    if (filter.role) userFilter.role = filter.role;
+    if (filter.departmentId) {
+      const departmentValues = [filter.departmentId];
+      if (mongoose.Types.ObjectId.isValid(filter.departmentId)) departmentValues.push(new mongoose.Types.ObjectId(filter.departmentId));
+      userFilter['workInformation.department'] = { $in: departmentValues };
+    }
+    const users = await User.find(userFilter, { _id: 1 }).lean();
+    mongoFilter.userId = { $in: users.map((user) => user._id) };
+  }
+
+  const records = await OffBoard.find(mongoFilter)
+    .select('status exitInformation finalSettlemelastMonthSalary updatedAt')
+    .lean();
+
+  const settlementFields = [
+    'lastMonthSalary', 'pendingSalary', 'leaveEncashment', 'bonus_incentives',
+    'reimbursements', 'noticePay', 'assetDamge', 'loanRecovery',
+    'advanceSalary', 'taxAdjustments', 'tenth_marksheet', 'twelevth_marksheet',
+  ];
+  const isSettlementComplete = (record) => settlementFields.every(
+    (field) => record.finalSettlemelastMonthSalary?.[field] === true
+  );
+
+  const inProgress = records.filter((r) => ['draft', 'pendingApproval', 'approved'].includes(r.status)).length;
+  const pendingClearance = records.filter((r) => r.status === 'approved').length;
+  const fnfPending = records.filter(
+    (r) => ['approved', 'relieved'].includes(r.status) && !isSettlementComplete(r)
+  ).length;
+  const completed = records.filter((r) => r.status === 'relieved').length;
+
+  const exitDurations = records
+    .filter((r) => r.status === 'relieved')
+    .map((r) => {
+      const start = new Date(r.exitInformation?.resignationSubmitionDate);
+      const end = new Date(r.updatedAt);
+      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return null;
+      return Math.max(0, Math.round((end - start) / (24 * 60 * 60 * 1000)));
+    })
+    .filter((value) => value !== null);
+
+  return {
+    inProgress,
+    pendingClearance,
+    fnfPending,
+    completed,
+    avgExitTime: exitDurations.length
+      ? Math.round((exitDurations.reduce((sum, value) => sum + value, 0) / exitDurations.length) * 10) / 10
+      : 0,
+    avgExitTimeUnit: 'days',
+    totalRecords: records.length,
   };
 };
 
@@ -262,6 +348,7 @@ const verifyEmailWithOtp = async (offBoardId, otp) => {
 module.exports = {
   createOffBoard,
   queryOffBoards,
+  getOffBoardSummary,
   getOffBoardById,
   getOffBoardByUserId,
   updateOffBoardById,

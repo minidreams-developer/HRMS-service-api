@@ -37,14 +37,24 @@ const attendanceRulesSchema = Joi.object().keys({
 
 const workingHoursString = Joi.string().pattern(/^\d+(?:\.\d+)?h$/).optional();
 
+const rotationSchema = Joi.object({
+  shiftIds: Joi.array().items(Joi.string().custom(objectId)).min(2).required(),
+  rotationType: Joi.string().valid('Weekly').required(),
+  rotationDuration: Joi.number().integer().min(1).required(),
+  effectiveStartDate: Joi.date().iso().required(),
+});
+
 const shiftBody = Joi.object().keys({
-  shiftType: Joi.string().valid('Fixed', 'Flexible').optional(),
+  // Lowercase Fixed/Flexible values exist in legacy records; Rotational uses
+  // the new product value and is intentionally case-sensitive.
+  shiftType: Joi.string().valid('Fixed', 'Flexible', 'fixed', 'flexible', 'Rotational').optional(),
+  rotation: rotationSchema.when('shiftType', { is: 'Rotational', then: Joi.required(), otherwise: Joi.optional() }),
   timings: Joi.array().items(timingSchema).custom((items, helpers) => {
     const days = items.map((item) => item.day.toLowerCase());
     if (new Set(days).size !== days.length) return helpers.error('any.invalid');
     for (const item of items) if (!item.off && item.startTime === item.endTime) return helpers.error('any.invalid');
     return items;
-  }).optional(),
+  }).when('shiftType', { is: 'Rotational', then: Joi.forbidden(), otherwise: Joi.optional() }),
   totalShiftDuration: Joi.string().pattern(/^\d+(?:\.\d+)?h$/).optional(),
   weekOff: Joi.array().items(Joi.string().valid('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday')).optional(),
   breakManagement: breakManagementSchema,

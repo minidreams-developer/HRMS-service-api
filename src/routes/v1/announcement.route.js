@@ -3,6 +3,7 @@ const announcementController = require('../../controllers/announcement.controlle
 const validate = require('../../middlewares/validate');
 const { announcementValidation } = require('../../validations');
 const { cloudinaryUpload } = require('../../middlewares/upload');
+const auth = require('../../middlewares/auth');
 
 const router = express.Router();
 
@@ -12,31 +13,35 @@ router
   // cloudinaryUpload runs first: parses multipart/form-data and uploads files to Cloudinary.
   // After it completes, req.files contains the uploaded file info.
   // The controller then merges them into req.body.images before saving.
-  .post(cloudinaryUpload('announcements', 'images', 10), validate(announcementValidation.createAnnouncement), announcementController.createAnnouncement)
-  .get(validate(announcementValidation.getAnnouncements), announcementController.getAnnouncements);
+  .post(auth('manageAnnouncements'), cloudinaryUpload('announcements', 'images', 10), validate(announcementValidation.createAnnouncement), announcementController.createAnnouncement)
+  .get(auth('manageAnnouncements'), validate(announcementValidation.getAnnouncements), announcementController.getAnnouncements);
+
+router.get('/me', auth(), validate(announcementValidation.getAnnouncements), announcementController.getMyAnnouncements);
 
 // ── Single announcement ──────────────────────────────────────────────────────
 router
   .route('/:announcementId')
-  .get(validate(announcementValidation.getAnnouncement),    announcementController.getAnnouncement)
-  .patch(validate(announcementValidation.updateAnnouncement), announcementController.updateAnnouncement)
-  .delete(validate(announcementValidation.deleteAnnouncement), announcementController.deleteAnnouncement);
+  .get(auth('manageAnnouncements'), validate(announcementValidation.getAnnouncement), announcementController.getAnnouncement)
+  .patch(auth('manageAnnouncements'), validate(announcementValidation.updateAnnouncement), announcementController.updateAnnouncement)
+  .delete(auth('manageAnnouncements'), validate(announcementValidation.deleteAnnouncement), announcementController.deleteAnnouncement);
+
+router.get('/me/:announcementId', auth(), validate(announcementValidation.getAnnouncement), announcementController.getMyAnnouncement);
 
 // ── Schedule an announcement ─────────────────────────────────────────────────
 // PATCH /v1/announcements/:announcementId/schedule
 // Body: { scheduleDateAndTime: "2026-08-20T09:00:00.000Z" }
 router
   .route('/:announcementId/schedule')
-  .patch(announcementController.scheduleAnnouncement);
+  .patch(auth('manageAnnouncements'), announcementController.scheduleAnnouncement);
 
 // ── Image management ─────────────────────────────────────────────────────────
 router
   .route('/:announcementId/images')
-  .post(cloudinaryUpload('announcements', 'images', 10), validate(announcementValidation.addImages), announcementController.addImages);
+  .post(auth('manageAnnouncements'), cloudinaryUpload('announcements', 'images', 10), validate(announcementValidation.addImages), announcementController.addImages);
 
 router
   .route('/:announcementId/images/:imgName')
-  .delete(validate(announcementValidation.removeImage), announcementController.removeImage);
+  .delete(auth('manageAnnouncements'), validate(announcementValidation.removeImage), announcementController.removeImage);
 
 module.exports = router;
 

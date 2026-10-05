@@ -43,6 +43,8 @@ const getOffBoards = {
     // exit type filter
     exitType:        Joi.string().optional(),
     status:          Joi.string().valid('draft', 'pendingApproval', 'approved', 'rejected', 'relieved', 'cancelled').optional(),
+    role:            Joi.string().valid('employee', 'staff', 'agent', 'manager', 'hr_manager', 'team_lead', 'admin', 'subAdmin', 'contractor').optional(),
+    departmentId:    Joi.string().custom(objectId).optional(),
     // last working date range
     lastWorkingFrom: Joi.date().iso().optional(),
     lastWorkingTo:   Joi.date().iso().optional(),
@@ -50,6 +52,16 @@ const getOffBoards = {
     sortBy:          Joi.string().optional(),
     limit:           Joi.number().integer().min(1).optional(),
     page:            Joi.number().integer().min(1).optional(),
+  }),
+};
+
+const getOffBoardSummary = {
+  query: Joi.object().keys({
+    exitType: Joi.string().optional(),
+    status: Joi.string().valid('draft', 'pendingApproval', 'approved', 'rejected', 'relieved', 'cancelled').optional(),
+    range: Joi.number().integer().min(1).max(3660).optional(),
+    role: Joi.string().valid('employee', 'staff', 'agent', 'manager', 'hr_manager', 'team_lead', 'admin', 'subAdmin', 'contractor').optional(),
+    departmentId: Joi.string().custom(objectId).optional(),
   }),
 };
 
@@ -96,6 +108,7 @@ const verifyOtp = {
 module.exports = {
   createOffBoard,
   getOffBoards,
+  getOffBoardSummary,
   getOffBoard,
   getOffBoardByUser,
   updateOffBoard,

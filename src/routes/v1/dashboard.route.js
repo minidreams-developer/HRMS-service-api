@@ -2,6 +2,7 @@ const express = require('express');
 const validate = require('../../middlewares/validate');
 const dashboardValidation = require('../../validations/dashboard.validation');
 const { dashboardController } = require('../../controllers');
+const auth = require('../../middlewares/auth');
 
 const router = express.Router();
 
@@ -16,18 +17,18 @@ const router = express.Router();
 
 router
   .route('/')
-  .get(validate(dashboardValidation.getDashboard), dashboardController.getDashboard);
+  .get(auth('manageAttendance'), validate(dashboardValidation.getDashboard), dashboardController.getDashboard);
 
 router
   .route('/quick-stats')
-  .get(validate(dashboardValidation.getQuickStats), dashboardController.getQuickStats);
+  .get(auth('manageAttendance'), validate(dashboardValidation.getQuickStats), dashboardController.getQuickStats);
 
 router
   .route('/attendance-overview')
-  .get(validate(dashboardValidation.getAttendanceOverview), dashboardController.getAttendanceOverview);
+  .get(auth('manageAttendance'), validate(dashboardValidation.getAttendanceOverview), dashboardController.getAttendanceOverview);
 
 router
   .route('/payroll-breakdown')
-  .get(validate(dashboardValidation.getPayrollBreakdown), dashboardController.getPayrollBreakdown);
+  .get(auth('manageAttendance'), validate(dashboardValidation.getPayrollBreakdown), dashboardController.getPayrollBreakdown);
 
 module.exports = router;

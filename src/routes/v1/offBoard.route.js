@@ -12,6 +12,10 @@ router
   .get(auth('manageAttendance'), validate(offBoardValidation.getOffBoards), offBoardController.getOffBoards);
 
 router
+  .route('/summary')
+  .get(auth('manageAttendance'), validate(offBoardValidation.getOffBoardSummary), offBoardController.getOffBoardSummary);
+
+router
   .route('/user/:userId')
   .get(auth('manageAttendance'), validate(offBoardValidation.getOffBoardByUser), offBoardController.getOffBoardByUser);
 

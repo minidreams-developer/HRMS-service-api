@@ -1,5 +1,5 @@
 const httpStatus = require('http-status');
-const { User, Attendance, Address, BankDetails, SalaryDetails, Commission, Shift, ShiftAssignment, Branch, Department, Team, Designation } = require('../models');
+const { User, Attendance, Asset, Address, BankDetails, SalaryDetails, Commission, Shift, ShiftAssignment, Branch, Department, Team, Designation } = require('../models');
 const EmergencyContact = require('../models/emergencyContact.model');
 const UserDocument = require('../models/userDocuments.model');
 const ApiError = require('../utils/ApiError');
@@ -190,6 +190,10 @@ const registerEmployee = async (body) => {
       )
     : body.spokenLanguages || [];
 
+  const designationInput = body.workInformation?.designationId || body.workInformation?.designation;
+  const designationId = toObjectId(designationInput);
+  const hasDesignationReference = isObjectId(designationInput);
+
   const userData = {
     name: body.name,
     email: body.email,
@@ -228,8 +232,10 @@ const registerEmployee = async (body) => {
       bankDetails: bankDetailIds,
       SalaryDetails: salaryDetailsId,
       userRemarks: body.workInformation?.userRemarks,
-      designation: body.workInformation?.designation || 'employee',
-      designationId: toObjectId(body.workInformation?.designationId),
+      // Legacy text designations remain in `designation`; valid designation
+      // IDs are stored canonically in the ObjectId ref field.
+      designation: hasDesignationReference ? 'employee' : (body.workInformation?.designation || 'employee'),
+      designationId: hasDesignationReference ? designationId : undefined,
       workExperience: body.workInformation?.workExperience,
       totalExperience: body.workInformation?.totalExperience,
       lastCompanyName: body.workInformation?.lastCompanyName,
@@ -304,6 +310,7 @@ const populateWorkInfo = async (docs) => {
     { path: 'workInformation.department', model: 'Department', select: 'departmentName departmentCode departmentDescription' },
     { path: 'workInformation.team',       model: 'Team',       select: 'teamName teamCode teamDescription' },
     { path: 'workInformation.branch',     model: 'Branch' },
+    { path: 'workInformation.designationId', model: 'Designation', select: 'designationName designationCode description isActive' },
     { path: 'workInformation.shiftId',    model: 'Shift' },
     { path: 'workInformation.contractAgent', model: 'User', select: 'name employeeId email role' },
     { path: 'workInformation.reportingPerson', model: 'User', select: 'name employeeId email' },
@@ -316,6 +323,21 @@ const populateWorkInfo = async (docs) => {
       const val = doc.workInformation?.[key];
       if (val && isObjectId(val)) {
         await mongoose.model(model).populate(doc, { path, select });
+      }
+    }
+
+    // Legacy records stored the designation reference in `designation` as a
+    // string, while newer records use `designationId`. Resolve both formats.
+    const workInfo = doc.workInformation;
+    const designationRef = workInfo?.designationId || workInfo?.designation;
+    if (designationRef && isObjectId(designationRef)) {
+      const designation = await mongoose.model('Designation')
+        .findById(designationRef)
+        .select('designationName designationCode description isActive')
+        .lean();
+      if (designation) {
+        if (workInfo.designationId) workInfo.designationId = designation;
+        if (workInfo.designation && isObjectId(workInfo.designation)) workInfo.designation = designation;
       }
     }
   }
@@ -377,10 +399,25 @@ const queryUsers = async (filter, options, advancedFilters = {}) => {
 
   // Designation filter — case-insensitive partial match
   if (advancedFilters.designation) {
-    mongoFilter['workInformation.designation'] = {
-      $regex: advancedFilters.designation,
-      $options: 'i',
-    };
+    if (isObjectId(advancedFilters.designation)) {
+      const designationId = new mongoose.Types.ObjectId(advancedFilters.designation);
+      const clause = { $or: [
+        { 'workInformation.designationId': designationId },
+        { 'workInformation.designation': advancedFilters.designation },
+      ] };
+      mongoFilter.$and = [...(mongoFilter.$and || []), clause];
+    } else {
+      mongoFilter['workInformation.designation'] = { $regex: advancedFilters.designation, $options: 'i' };
+    }
+  }
+
+  if (advancedFilters.designationId && isObjectId(advancedFilters.designationId)) {
+    const designationId = new mongoose.Types.ObjectId(advancedFilters.designationId);
+    const clause = { $or: [
+      { 'workInformation.designationId': designationId },
+      { 'workInformation.designation': advancedFilters.designationId },
+    ] };
+    mongoFilter.$and = [...(mongoFilter.$and || []), clause];
   }
 
   // Shift filter
@@ -540,7 +577,14 @@ const getUserByEmployeeId = async (employeeId) => {
     .populate('userDocuments')
     .populate('workInformation.SalaryDetails')
     .populate('workInformation.bankDetails');
-  if (user) await populateWorkInfo([user]);
+  if (user) {
+    await populateWorkInfo([user]);
+
+    // Assets are linked to the employee by the User _id, not employeeId.
+    user._doc.assets = await Asset.find({ assignedTo: user._id })
+      .populate('assignedTo', 'name employeeId email')
+      .sort({ issuedDate: -1, createdAt: -1 });
+  }
   return user;
 };
 

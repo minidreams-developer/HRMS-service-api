@@ -13,6 +13,8 @@ const extractFilters = (query) => {
   return filters;
 };
 
+const scopedFilters = async (req) => dashboardService.resolveDashboardFilters(req.user, extractFilters(req.query));
+
 /**
  * GET /v1/dashboard
  * Full dashboard — quick stats + attendance overview + payroll breakdown in one call.
@@ -20,7 +22,7 @@ const extractFilters = (query) => {
  */
 const getDashboard = catchAsync(async (req, res) => {
   const date    = req.query.date ? new Date(req.query.date) : new Date();
-  const filters = extractFilters(req.query);
+  const filters = await scopedFilters(req);
   const result  = await dashboardService.getDashboard(date, filters, req.query.period || 'today');
   res.send(result);
 });
@@ -32,7 +34,7 @@ const getDashboard = catchAsync(async (req, res) => {
  */
 const getQuickStats = catchAsync(async (req, res) => {
   const date    = req.query.date ? new Date(req.query.date) : new Date();
-  const filters = extractFilters(req.query);
+  const filters = await scopedFilters(req);
   const result  = await dashboardService.getQuickStats(date, filters);
   res.send(result);
 });
@@ -44,7 +46,7 @@ const getQuickStats = catchAsync(async (req, res) => {
  */
 const getAttendanceOverview = catchAsync(async (req, res) => {
   const date    = req.query.date ? new Date(req.query.date) : new Date();
-  const filters = extractFilters(req.query);
+  const filters = await scopedFilters(req);
   const result  = await dashboardService.getAttendanceOverview(date, filters, req.query.period || 'week');
   res.send(result);
 });
@@ -57,7 +59,7 @@ const getAttendanceOverview = catchAsync(async (req, res) => {
 const getPayrollBreakdown = catchAsync(async (req, res) => {
   const month   = parseInt(req.query.month, 10) || new Date().getMonth() + 1;
   const year    = parseInt(req.query.year,  10) || new Date().getFullYear();
-  const filters = extractFilters(req.query);
+  const filters = await scopedFilters(req);
   const result  = await dashboardService.getPayrollBreakdown(month, year, filters, req.query.period || 'month');
   res.send(result);
 });

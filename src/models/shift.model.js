@@ -38,6 +38,13 @@ const timingSchema = new mongoose.Schema({
   },
 });
 
+const rotationSchema = new mongoose.Schema({
+  shiftIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Shift' }],
+  rotationType: { type: String, enum: ['Weekly'], default: 'Weekly' },
+  rotationDuration: { type: Number, min: 1 },
+  effectiveStartDate: { type: Date },
+}, { _id: false });
+
 const gracePeriodSchema = new mongoose.Schema({
   earlyCheckIn: {
     type: Number,
@@ -100,6 +107,7 @@ const shiftSchema = new mongoose.Schema(
       type: Number,
       min: 0.000001,
     },
+    rotation: rotationSchema,
 
     // Advanced Timing Rules
     gracePeriod: {

@@ -6,12 +6,27 @@ const { setPending, getPending, clearPending } = require('../utils/pendingCode')
 
 const SHIFT_CODE_KEY = 'shiftCode';
 
+const validateRotation = async (body, currentId = null) => {
+  if (body.shiftType !== 'Rotational' && !body.rotation) return;
+  if (body.shiftType !== 'Rotational') throw new ApiError(httpStatus.BAD_REQUEST, 'rotation is only valid for Rotational shifts');
+  const ids = body.rotation?.shiftIds || [];
+  if (new Set(ids.map((id) => String(id))).size !== ids.length) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Rotation shifts must be unique');
+  }
+  if (ids.some((id) => currentId && String(id) === String(currentId))) throw new ApiError(httpStatus.BAD_REQUEST, 'A rotational shift cannot reference itself');
+  const children = await Shift.find({ _id: { $in: ids } }).select('_id shiftType isShiftActive').lean();
+  if (children.length !== ids.length) throw new ApiError(httpStatus.BAD_REQUEST, 'All rotation shifts must exist');
+  if (children.some((shift) => shift.shiftType === 'Rotational')) throw new ApiError(httpStatus.BAD_REQUEST, 'Rotational shifts cannot contain another Rotational shift');
+  if (children.some((shift) => shift.isShiftActive === false)) throw new ApiError(httpStatus.BAD_REQUEST, 'Inactive shifts cannot be used in a rotation');
+};
+
 /**
  * Create a shift — clears the pending shiftCode once saved
  * @param {Object} body
  * @returns {Promise<Shift>}
  */
 const createShift = async (body, actor) => {
+  await validateRotation(body);
   const shift = await Shift.create({ ...body, createdBy: actor?._id });
   if (body.shiftCode && body.shiftCode === getPending(SHIFT_CODE_KEY)) {
     clearPending(SHIFT_CODE_KEY);
@@ -93,6 +108,7 @@ const updateShiftById = async (id, updateBody, actor) => {
   if (!shift) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Shift not found');
   }
+  await validateRotation({ ...shift.toObject(), ...updateBody }, id);
   Object.assign(shift, updateBody, { updatedBy: actor?._id });
   await shift.save();
   return shift;
@@ -107,6 +123,13 @@ const deleteShiftById = async (id, actor) => {
   const shift = await getShiftById(id);
   if (!shift) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Shift not found');
+  }
+  if (shift.shiftType !== 'Rotational' && await Shift.exists({
+    shiftType: 'Rotational',
+    isShiftActive: true,
+    'rotation.shiftIds': shift._id,
+  })) {
+    throw new ApiError(httpStatus.CONFLICT, 'Shift is used by an active rotational shift and cannot be deactivated');
   }
   shift.isShiftActive = false;
   shift.deactivatedBy = actor?._id;

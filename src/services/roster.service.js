@@ -113,6 +113,33 @@ const queryRoster = async (filter, options = {}) => {
     query.employeeId = { $in: (await User.find(userQuery).select('_id').lean()).map((user) => user._id) };
   }
   const result = await Roster.paginate(query, { ...options, populate: 'employeeId,shiftId,createdBy,updatedBy,cancelledBy' });
+
+  // Include the current active workforce count for every shift returned by
+  // the roster. This is based on the employee/staff shift assignment, not on
+  // the number of roster rows in the current page.
+  const shiftIds = [...new Set(result.results
+    .map((roster) => roster.shiftId?._id || roster.shiftId)
+    .filter(Boolean)
+    .map((shiftId) => String(shiftId)))].map((shiftId) => oid(shiftId));
+  if (shiftIds.length) {
+    const activeUsersByShift = await User.aggregate([
+      {
+        $match: {
+          role: { $in: ['employee', 'staff'] },
+          isActive: 'Active',
+          isDeleted: { $ne: true },
+          'workInformation.shiftId': { $in: shiftIds },
+        },
+      },
+      { $group: { _id: '$workInformation.shiftId', total: { $sum: 1 } } },
+    ]);
+    const counts = new Map(activeUsersByShift.map((item) => [String(item._id), item.total]));
+    result.results.forEach((roster) => {
+      if (roster.shiftId && typeof roster.shiftId === 'object') {
+        roster.shiftId = { ...roster.shiftId, totalActiveUsers: counts.get(String(roster.shiftId._id)) || 0 };
+      }
+    });
+  }
   return result;
 };
 

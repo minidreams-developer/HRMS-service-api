@@ -47,6 +47,11 @@ function generateStaffId() {
   return `${prefix}${randomNumber}`;
 }
 
+/** Generate Designation Code */
+function generateDesignationCode() {
+  return `DESG${crypto.randomInt(100000, 999999)}`;
+}
+
 module.exports = {
   generateEmployeeId,
   generateTeamId,
@@ -55,4 +60,5 @@ module.exports = {
   generateShiftId,
   generateAgentId,
   generateStaffId,
+  generateDesignationCode,
 };

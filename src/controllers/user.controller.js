@@ -138,6 +138,7 @@ const getUsers = catchAsync(async (req, res) => {
     teamId:        req.query.teamId        || null,
     branchId:      req.query.branchId      || null,
     designation:   req.query.designation   || null,
+    designationId: req.query.designationId || null,
     shiftId:       req.query.shiftId       || null,
     gender:        req.query.gender        || null,
     status:        req.query.status        || null,
