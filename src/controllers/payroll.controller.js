@@ -12,7 +12,7 @@ const managementRoles = new Set(['manager', 'hr_manager', 'subAdmin', 'admin']);
  * Query params: month, year, departmentId, shiftId, search, page, limit, sortBy
  */
 const getPayrollList = catchAsync(async (req, res) => {
-  const query   = pick(req.query, ['month', 'year', 'departmentId', 'shiftId', 'branchId', 'search', 'status']);
+  const query   = pick(req.query, ['role', 'month', 'year', 'departmentId', 'shiftId', 'branchId', 'search', 'status']);
   const options = pick(req.query, ['sortBy', 'limit', 'page']);
   const result  = await payrollService.getPayrollList(query, options);
   res.send(result);

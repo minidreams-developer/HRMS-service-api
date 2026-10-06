@@ -45,10 +45,11 @@ const getMonthRange = (month, year) => {
 const computePayrollForEmployee = async (employee, month, year, payrollOverride = null) => {
   const { start, end } = getMonthRange(month, year);
   const employeeObjectId = employee._id;
+  const attendanceEmployeeIds = [employeeObjectId, String(employeeObjectId), employee.employeeId].filter(Boolean);
 
   // ── 1. Attendance counts ──────────────────────────────────────────────────
   const attendanceRecords = await Attendance.find({
-    employeeId: employeeObjectId,
+    employeeId: { $in: attendanceEmployeeIds },
     date: { $gte: start, $lte: end },
   }).lean();
 
@@ -193,6 +194,7 @@ const computePayrollForEmployee = async (employee, month, year, payrollOverride 
   );
 
   return {
+    basicSalary,
     fullDays,
     halfDays,
     offDays,

@@ -15,6 +15,7 @@ const timesheetRoute = require('./timesheet.route');
 const shiftRoute = require('./shift.route');
 const leaveRequestsRoute = require('./leaveRequests.route');
 const leaveBalanceRoute = require('./leaveBalance.route');
+const leaveTypeRoute = require('./leaveType.route');
 const overtimeRoute = require('./overtimeManagement.route');
 const holidayRoute = require('./holiday.route');
 const contractorRoute = require('./contractor.route');
@@ -107,6 +108,10 @@ const defaultRoutes = [
   {
     path: '/leave-balances',
     route: leaveBalanceRoute,
+  },
+  {
+    path: '/leave-types',
+    route: leaveTypeRoute,
   },
   { path: '/permissions', route: permissionRoute },
   { path: '/shift-assignments', route: shiftAssignmentRoute },

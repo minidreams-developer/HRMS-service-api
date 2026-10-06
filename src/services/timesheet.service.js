@@ -10,6 +10,7 @@ const day = (value) => { const d = new Date(value); if (Number.isNaN(d.getTime()
 const key = (value) => day(value).toISOString().slice(0, 10);
 const end = (value) => new Date(day(value).getTime() + DAY - 1);
 const days = (from, count) => Array.from({ length: count }, (_, i) => new Date(day(from).getTime() + (i * DAY)));
+const addDays = (from, count) => new Date(day(from).getTime() + (count * DAY));
 const id = (value) => value == null ? null : String(value);
 const oid = (value) => mongoose.Types.ObjectId.isValid(String(value)) ? new mongoose.Types.ObjectId(String(value)) : null;
 
@@ -100,7 +101,8 @@ const stateFor = async (user, date, sources) => {
   return { user, date: key(date), attendance, holiday, dayOff, leave, shift: shiftData, effectiveCategory, sourceType, sourceId, overtimeHours: overtimeFor(sources.overtime.get(id(employeeId)) || [], date) };
 };
 
-const present = (state) => ({ ...userView(state.user), shift: shiftView(state.shift), checkIn: state.attendance?.loginTime || null, checkOut: state.attendance?.logoutTime || null, workingHours: state.attendance?.totalWorkedHours || 0, attendanceCategory: state.attendance?.attendanceCategory || null, timingStatus: state.attendance?.timingStatus || state.attendance?.attendanceStatus || null, effectiveCategory: state.effectiveCategory, sourceType: state.sourceType, sourceId: state.sourceId, overtimeHours: state.overtimeHours });
+const regularWorkingHours = (state) => Math.max(0, (state.attendance?.totalWorkedHours || 0) - (state.overtimeHours || 0));
+const present = (state) => ({ ...userView(state.user), shift: shiftView(state.shift), checkIn: state.attendance?.loginTime || null, checkOut: state.attendance?.logoutTime || null, workingHours: regularWorkingHours(state), attendanceCategory: state.attendance?.attendanceCategory || null, timingStatus: state.attendance?.timingStatus || state.attendance?.attendanceStatus || null, effectiveCategory: state.effectiveCategory, sourceType: state.sourceType, sourceId: state.sourceId, overtimeHours: state.overtimeHours });
 
 const statesFor = async (users, dateList) => {
   const sources = await loadSources(users, dateList[0], dateList[dateList.length - 1]);
@@ -114,6 +116,34 @@ const pagination = (items, page, limit) => ({ results: items.slice((page - 1) * 
 const getStats = async (date = new Date(), role) => {
   const users = await getUsers({ role }); const states = await statesFor(users, [day(date)]); const unique = (predicate) => new Set(states.filter(predicate).map((s) => id(s.user._id))).size;
   return { date: key(date), role, present: unique((s) => s.attendance && s.attendance.loginTime && s.attendance.attendanceCategory !== 'absent'), absent: unique((s) => s.attendance?.attendanceCategory === 'absent'), onTime: unique((s) => (s.attendance?.timingStatus || s.attendance?.attendanceStatus) === 'onTime'), lateEntry: unique((s) => (s.attendance?.timingStatus || s.attendance?.attendanceStatus) === 'arrivedLate'), onLeave: unique((s) => s.leave) };
+};
+
+const getQuickStats = async (options) => {
+  const reference = day(options.toDate || new Date());
+  let from;
+  const to = reference;
+  if (options.fromDate) from = day(options.fromDate);
+  else if (options.period === 'today') from = reference;
+  else if (options.period === 'week') from = addDays(reference, 1 - (reference.getUTCDay() || 7));
+  else if (options.period === 'month') from = new Date(Date.UTC(reference.getUTCFullYear(), reference.getUTCMonth(), 1));
+  else from = addDays(reference, -29);
+  if (from > to) throw new ApiError(400, 'fromDate must be before or equal to toDate');
+
+  const users = await getUsers(options);
+  const states = await statesFor(users, days(from, Math.floor((to - from) / DAY) + 1));
+  const counted = states.filter((state) => state.attendance || state.leave);
+  const unique = (predicate) => new Set(counted.filter(predicate).map((state) => `${id(state.user._id)}:${state.date}`)).size;
+  return {
+    period: options.period || (options.fromDate ? 'custom' : 'last30days'),
+    role: options.role,
+    fromDate: key(from),
+    toDate: key(to),
+    present: unique((state) => ['fullDay', 'halfDay'].includes(state.attendance?.attendanceCategory)),
+    absent: unique((state) => state.attendance?.attendanceCategory === 'absent'),
+    onTime: unique((state) => (state.attendance?.timingStatus || state.attendance?.attendanceStatus) === 'onTime'),
+    lateEntry: unique((state) => (state.attendance?.timingStatus || state.attendance?.attendanceStatus) === 'arrivedLate'),
+    onLeave: unique((state) => Boolean(state.leave)),
+  };
 };
 
 const getDay = async (options) => {
@@ -134,7 +164,7 @@ const getDateDetail = async (employeeId, date) => {
   const user = await User.findOne({ _id: employeeId, isDeleted: { $ne: true } }).select('name employeeId role workInformation').lean();
   if (!user) throw new ApiError(404, 'Employee not found');
   const state = (await statesFor([user], [day(date)]))[0]; const base = { employee: userView(user), date: state.date, effectiveCategory: state.effectiveCategory, sourceType: state.sourceType, sourceId: state.sourceId };
-  if (state.sourceType === 'attendance') return { ...base, details: { loginTime: state.attendance.loginTime, logoutTime: state.attendance.logoutTime, workingHours: state.attendance.totalWorkedHours || 0, breakHours: state.attendance.shiftSnapshot?.breakDuration ? state.attendance.shiftSnapshot.breakDuration / 60 : 0, shift: shiftView(state.shift), timingStatus: state.attendance.timingStatus || state.attendance.attendanceStatus, attendanceCategory: state.attendance.attendanceCategory, remarks: state.attendance.remarks, overtimeHours: state.overtimeHours, attendanceLogs: [], attendanceLogSupported: false } };
+  if (state.sourceType === 'attendance') return { ...base, details: { loginTime: state.attendance.loginTime, logoutTime: state.attendance.logoutTime, workingHours: regularWorkingHours(state), breakHours: state.attendance.shiftSnapshot?.breakDuration ? state.attendance.shiftSnapshot.breakDuration / 60 : 0, shift: shiftView(state.shift), timingStatus: state.attendance.timingStatus || state.attendance.attendanceStatus, attendanceCategory: state.attendance.attendanceCategory, remarks: state.attendance.remarks, overtimeHours: state.overtimeHours, attendanceLogs: [], attendanceLogSupported: false } };
   if (state.sourceType === 'leave') return { ...base, details: { leaveType: state.leave.leaveType, leaveDuration: state.leave.leaveDuration, halfDaySession: state.leave.halfDaySession, date: state.date, status: state.leave.status } };
   if (state.sourceType === 'holiday') return { ...base, details: { holidayTitle: state.holiday.holidayTitle, description: state.holiday.description, date: state.holiday.date, nextWorkingDay: state.holiday.nextWorkingDay, Remarks: state.holiday.Remarks } };
   if (state.sourceType === 'dayOff') return { ...base, details: { date: state.date, reason: state.dayOff.reason, status: state.dayOff.status } };
@@ -142,4 +172,4 @@ const getDateDetail = async (employeeId, date) => {
   return { ...base, effectiveCategory: 'noAttendance', details: { date: state.date, shift: shiftView(state.shift) } };
 };
 
-module.exports = { getStats, getDay, getWeek, getDateDetail };
+module.exports = { getStats, getQuickStats, getDay, getWeek, getDateDetail };

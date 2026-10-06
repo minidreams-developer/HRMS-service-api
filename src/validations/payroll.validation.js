@@ -3,6 +3,7 @@ const { objectId } = require('./custom.validation');
 
 const getPayrollList = {
   query: Joi.object().keys({
+    role:         Joi.string().valid('employee', 'staff').optional(),
     month:        Joi.number().integer().min(1).max(12).optional(),
     year:         Joi.number().integer().min(2000).max(2100).optional(),
     // search across employee name, employeeId, email

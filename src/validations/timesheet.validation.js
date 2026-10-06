@@ -16,6 +16,15 @@ const common = {
 
 module.exports = {
   stats: { query: Joi.object({ date, role }) },
+  quickStats: { query: Joi.object({
+    role,
+    period: Joi.string().valid('today', 'week', 'month', 'last30days').default('last30days'),
+    fromDate: date,
+    toDate: date,
+    search: Joi.string().allow(''),
+    departmentId: Joi.string().custom(objectId),
+    shiftId: Joi.string().custom(objectId),
+  }) },
   day: { query: Joi.object({ ...common, date: date.required() }) },
   week: { query: Joi.object({ ...common, startDate: date.required() }) },
   dateDetail: { params: Joi.object({ employeeId: Joi.string().custom(objectId).required(), date: date.required() }) },
