@@ -12,6 +12,15 @@ router
   .post(userController.registerEmployee);
 
 router
+  .route('/profile')
+  .get(auth(), userController.getProfile)
+  .patch(auth(), validate(userValidation.updateProfile), userController.updateProfile);
+
+router
+  .route('/profile/password')
+  .patch(auth(), validate(userValidation.changePassword), userController.changePassword);
+
+router
   .route('/count')
   .get(userController.getEmployeeCount);
 

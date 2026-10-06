@@ -1,43 +1,45 @@
 const express = require('express');
+const auth = require('../../middlewares/auth');
 const roleAccessController = require('../../controllers/roleAccess.controller');
 const validate = require('../../middlewares/validate');
 const { roleAccessValidation } = require('../../validations');
+const settingsAdmin = require('../../middlewares/settingsAdmin');
 
 const router = express.Router();
 
 // ── Collection ──────────────────────────────────────────────────────────────
 router
   .route('/')
-  .post(validate(roleAccessValidation.createRole), roleAccessController.createRole)
-  .get(validate(roleAccessValidation.getRoles), roleAccessController.getRoles);
+  .post(auth(), settingsAdmin, validate(roleAccessValidation.createRole), roleAccessController.createRole)
+  .get(auth(), settingsAdmin, validate(roleAccessValidation.getRoles), roleAccessController.getRoles);
 
 // ── Single role ──────────────────────────────────────────────────────────────
 router
   .route('/:roleId')
-  .get(validate(roleAccessValidation.getRole), roleAccessController.getRole)
-  .patch(validate(roleAccessValidation.updateRole), roleAccessController.updateRole)
-  .delete(validate(roleAccessValidation.deleteRole), roleAccessController.deleteRole);
+  .get(auth(), settingsAdmin, validate(roleAccessValidation.getRole), roleAccessController.getRole)
+  .patch(auth(), settingsAdmin, validate(roleAccessValidation.updateRole), roleAccessController.updateRole)
+  .delete(auth(), settingsAdmin, validate(roleAccessValidation.deleteRole), roleAccessController.deleteRole);
 
 // ── Permissions — full group array ───────────────────────────────────────────
 router
   .route('/:roleId/permissions')
-  .get(validate(roleAccessValidation.getRolePermissions), roleAccessController.getRolePermissions)
-  .patch(validate(roleAccessValidation.updateRolePermissions), roleAccessController.updateRolePermissions);
+  .get(auth(), settingsAdmin, validate(roleAccessValidation.getRolePermissions), roleAccessController.getRolePermissions)
+  .patch(auth(), settingsAdmin, validate(roleAccessValidation.updateRolePermissions), roleAccessController.updateRolePermissions);
 
 // ── Permissions — single module inside a group ───────────────────────────────
 router
   .route('/:roleId/permissions/:group/:module')
-  .patch(validate(roleAccessValidation.updateModulePermissions), roleAccessController.updateModulePermissions);
+  .patch(auth(), settingsAdmin, validate(roleAccessValidation.updateModulePermissions), roleAccessController.updateModulePermissions);
 
 // ── Permissions — reset to all-false ─────────────────────────────────────────
 router
   .route('/:roleId/permissions/reset')
-  .post(validate(roleAccessValidation.getRole), roleAccessController.resetRolePermissions);
+  .post(auth(), settingsAdmin, validate(roleAccessValidation.getRole), roleAccessController.resetRolePermissions);
 
 // ── Clone ─────────────────────────────────────────────────────────────────────
 router
   .route('/:roleId/clone')
-  .post(validate(roleAccessValidation.cloneRole), roleAccessController.cloneRole);
+  .post(auth(), settingsAdmin, validate(roleAccessValidation.cloneRole), roleAccessController.cloneRole);
 
 module.exports = router;
 

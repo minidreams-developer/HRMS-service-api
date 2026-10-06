@@ -44,6 +44,7 @@ const createUser = catchAsync(async (req, res) => {
     // Authentication
     password: req.body.password || 'defaultPassword123',
     role: req.body.role || 'employee',
+    roleId: req.body.roleId,
     
     // Work Details
     branch: req.body.branch,
@@ -157,6 +158,22 @@ const getUser = catchAsync(async (req, res) => {
     throw new ApiError(httpStatus.NOT_FOUND, 'User not found');
   }
   res.send(user);
+});
+
+const getProfile = catchAsync(async (req, res) => {
+  const user = await userService.getProfile(req.user.id);
+  if (!user) throw new ApiError(httpStatus.NOT_FOUND, 'User not found');
+  res.send({ user });
+});
+
+const updateProfile = catchAsync(async (req, res) => {
+  const user = await userService.updateProfile(req.user.id, req.body);
+  res.send({ user });
+});
+
+const changePassword = catchAsync(async (req, res) => {
+  const user = await userService.changePassword(req.user.id, req.body.currentPassword, req.body.newPassword);
+  res.send({ user });
 });
 
 const updateUser = catchAsync(async (req, res) => {
@@ -326,6 +343,9 @@ module.exports = {
   createUser,
   getUsers,
   getUser,
+  getProfile,
+  updateProfile,
+  changePassword,
   updateUser,
   deleteUser,
   getEmployeeCount,

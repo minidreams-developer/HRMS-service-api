@@ -6,6 +6,16 @@ const { setPending, getPending, clearPending } = require('../utils/pendingCode')
 
 const SHIFT_CODE_KEY = 'shiftCode';
 
+const withRotationDefaults = (body) => {
+  if (body.shiftType !== 'Rotational') return body;
+  return {
+    ...body,
+    totalShiftDuration: body.totalShiftDuration && body.totalShiftDuration !== '0h' ? body.totalShiftDuration : '8h',
+    minWorkingHours: body.minWorkingHours && body.minWorkingHours !== '0h' ? body.minWorkingHours : '8h',
+    halfDayWorkingHours: body.halfDayWorkingHours && body.halfDayWorkingHours !== '0h' ? body.halfDayWorkingHours : '4h',
+  };
+};
+
 const validateRotation = async (body, currentId = null) => {
   if (body.shiftType !== 'Rotational' && !body.rotation) return;
   if (body.shiftType !== 'Rotational') throw new ApiError(httpStatus.BAD_REQUEST, 'rotation is only valid for Rotational shifts');
@@ -26,8 +36,9 @@ const validateRotation = async (body, currentId = null) => {
  * @returns {Promise<Shift>}
  */
 const createShift = async (body, actor) => {
-  await validateRotation(body);
-  const shift = await Shift.create({ ...body, createdBy: actor?._id });
+  const normalizedBody = withRotationDefaults(body);
+  await validateRotation(normalizedBody);
+  const shift = await Shift.create({ ...normalizedBody, createdBy: actor?._id });
   if (body.shiftCode && body.shiftCode === getPending(SHIFT_CODE_KEY)) {
     clearPending(SHIFT_CODE_KEY);
   }
@@ -108,8 +119,9 @@ const updateShiftById = async (id, updateBody, actor) => {
   if (!shift) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Shift not found');
   }
-  await validateRotation({ ...shift.toObject(), ...updateBody }, id);
-  Object.assign(shift, updateBody, { updatedBy: actor?._id });
+  const normalizedBody = withRotationDefaults({ ...shift.toObject(), ...updateBody });
+  await validateRotation(normalizedBody, id);
+  Object.assign(shift, normalizedBody, { updatedBy: actor?._id });
   await shift.save();
   return shift;
 };

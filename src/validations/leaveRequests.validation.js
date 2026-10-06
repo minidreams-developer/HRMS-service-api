@@ -48,6 +48,12 @@ const getLeaveRequests = {
   }),
 };
 
+const getQuickStats = Joi.object({
+  period: Joi.string().valid('today', 'week', 'month').default('today'),
+  fromDate: Joi.date().iso().optional(),
+  toDate: Joi.date().iso().min(Joi.ref('fromDate')).optional(),
+});
+
 const getLeaveRequestById = {
   params: Joi.object().keys({
     leaveRequestId: Joi.string().custom(objectId).required(),
@@ -110,6 +116,7 @@ const deleteLeaveRequest = {
 module.exports = {
   createLeaveRequest,
   getLeaveRequests,
+  getQuickStats,
   getLeaveRequestById,
   getLeaveRequestsByEmployee,
   updateLeaveRequest,

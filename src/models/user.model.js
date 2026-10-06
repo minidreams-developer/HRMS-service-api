@@ -53,6 +53,11 @@ const userSchema = mongoose.Schema(
       enum: roles,
       default: "employee",
     },
+    roleId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Role',
+      default: null,
+    },
 
     phone: {
       type: Number,

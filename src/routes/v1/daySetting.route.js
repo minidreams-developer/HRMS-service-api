@@ -1,5 +1,7 @@
 const express = require('express');
 const daySettingController = require('../../controllers/daySetting.controller');
+const auth = require('../../middlewares/auth');
+const settingsAdmin = require('../../middlewares/settingsAdmin');
 
 const router = express.Router();
 
@@ -17,21 +19,21 @@ const router = express.Router();
 
 router
   .route('/')
-  .post(daySettingController.createDefaultDaySetting)
-  .get(daySettingController.getDaySettings);
+  .post(auth(), settingsAdmin, daySettingController.createDefaultDaySetting)
+  .get(auth(), settingsAdmin, daySettingController.getDaySettings);
 
 router
   .route('/single')
-  .post(daySettingController.createSingleDaySetting);
+  .post(auth(), settingsAdmin, daySettingController.createSingleDaySetting);
 
 router
   .route('/default')
-  .get(daySettingController.getDefaultDaySetting);
+  .get(auth(), settingsAdmin, daySettingController.getDefaultDaySetting);
 
 router
   .route('/:daySettingId')
-  .get(daySettingController.getDaySetting)
-  .patch(daySettingController.updateDaySetting)
-  .delete(daySettingController.deleteDaySetting);
+  .get(auth(), settingsAdmin, daySettingController.getDaySetting)
+  .patch(auth(), settingsAdmin, daySettingController.updateDaySetting)
+  .delete(auth(), settingsAdmin, daySettingController.deleteDaySetting);
 
 module.exports = router;

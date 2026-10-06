@@ -36,9 +36,9 @@ const createAnnouncement = catchAsync(async (req, res) => {
  * Supports: title, search, fromDate, toDate, status, sortBy, limit, page
  */
 const getAnnouncements = catchAsync(async (req, res) => {
-  const filter  = pick(req.query, ['title', 'search', 'fromDate', 'toDate', 'status', 'isActive']);
+  const filter = pick(req.query, ['title', 'search', 'fromDate', 'toDate', 'status', 'isActive']);
   const options = pick(req.query, ['sortBy', 'limit', 'page']);
-  const result  = await announcementService.queryAnnouncements(filter, options);
+  const result = await announcementService.queryAnnouncements(filter, options);
   res.send(result);
 });
 

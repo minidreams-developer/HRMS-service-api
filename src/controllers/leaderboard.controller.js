@@ -10,9 +10,7 @@ const createLeaderboard = catchAsync(async (req, res) => {
 });
 
 const getLeaderboards = catchAsync(async (req, res) => {
-  const filter  = pick(req.query, ['search', 'user']);
-  const options = pick(req.query, ['sortBy', 'limit', 'page']);
-  const result  = await leaderboardService.queryLeaderboards(filter, options);
+  const result = await leaderboardService.queryAttendanceLeaderboard(req.query);
   res.send(result);
 });
 

@@ -30,6 +30,17 @@ const getOvertime = {
   }),
 };
 
+const getQuickStats = Joi.object({
+  period: Joi.string().valid('today', 'week', 'month').default('today'),
+  fromDate: Joi.date().iso().optional(),
+  toDate: Joi.date().iso().min(Joi.ref('fromDate')).optional(),
+});
+
+const approveAll = Joi.object({
+  fromDate: Joi.date().iso().optional(),
+  toDate: Joi.date().iso().min(Joi.ref('fromDate')).optional(),
+});
+
 const getOvertimeById = {
   params: Joi.object().keys({
     overtimeId: Joi.string().custom(objectId).required(),
@@ -88,6 +99,8 @@ const deleteOvertime = {
 module.exports = {
   createOvertime,
   getOvertime,
+  getQuickStats,
+  approveAll,
   getOvertimeById,
   getOvertimeByEmployee,
   updateOvertime,

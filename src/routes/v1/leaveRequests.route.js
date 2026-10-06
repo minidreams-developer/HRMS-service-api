@@ -7,6 +7,10 @@ const auth = require('../../middlewares/auth');
 const router = express.Router();
 
 router
+  .route('/quick-stats')
+  .get(auth(), validate({ query: require('../../validations/leaveRequests.validation').getQuickStats }), leaveRequestsController.getQuickStats);
+
+router
   .route('/')
   .post(auth(), validate(leaveRequestsValidation.createLeaveRequest), leaveRequestsController.createLeaveRequests)
   .get(auth(), validate(leaveRequestsValidation.getLeaveRequests), leaveRequestsController.getLeaveRequests);

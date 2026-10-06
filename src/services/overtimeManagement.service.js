@@ -172,6 +172,58 @@ const queryOvertime = async (filter, options) => {
   };
 };
 
+const getQuickStats = async (period = 'today', fromDate, toDate) => {
+  const now = new Date();
+  const start = fromDate ? utcDay(new Date(fromDate)) : utcDay(now);
+  const end = toDate
+    ? (() => { const value = new Date(toDate); value.setUTCHours(23, 59, 59, 999); return value; })()
+    : period === 'today'
+      ? new Date(start.getTime() + 86399999)
+      : period === 'week'
+        ? new Date(start.getTime() + (7 * 86400000) - 1)
+        : new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 0, 23, 59, 59, 999));
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    console.log('[overtime quick-stats] invalid date range:', { period, fromDate, toDate, start, end });
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Invalid date range');
+  }
+  if (end < start) throw new ApiError(httpStatus.BAD_REQUEST, 'toDate must be on or after fromDate');
+  const records = await Overtime.find({ OvertimeDate: { $gte: start, $lte: end } }).select('status').lean();
+  return {
+    period,
+    fromDate: start,
+    toDate: end,
+    requested: records.length,
+    approved: records.filter((record) => record.status === 'approved').length,
+    rejected: records.filter((record) => record.status === 'rejected').length,
+    pending: records.filter((record) => record.status === 'pending').length,
+  };
+};
+
+const approveAll = async (filter, actor) => {
+  if (!isManagement(actor)) throw new ApiError(httpStatus.FORBIDDEN, 'Only management may approve overtime');
+  const query = { status: 'pending' };
+  if (filter.fromDate || filter.toDate) {
+    query.OvertimeDate = {};
+    if (filter.fromDate) query.OvertimeDate.$gte = new Date(filter.fromDate);
+    if (filter.toDate) {
+      const end = new Date(filter.toDate);
+      end.setUTCHours(23, 59, 59, 999);
+      query.OvertimeDate.$lte = end;
+    }
+  }
+  const records = await Overtime.find(query);
+  for (const overtime of records) {
+    overtime.status = 'approved';
+    overtime.approvedBy = actor._id;
+    overtime.approvedAt = new Date();
+    if (!Array.isArray(overtime.statusHistory)) overtime.statusHistory = [];
+    overtime.statusHistory.push({ status: 'approved', changedBy: actor._id, changedAt: new Date() });
+    // eslint-disable-next-line no-await-in-loop
+    await overtime.save();
+  }
+  return { approvedCount: records.length };
+};
+
 /**
  * Get overtime by id with employee and department info
  */
@@ -246,6 +298,8 @@ const deleteOvertimeById = async (id) => {
 module.exports = {
   createOvertime,
   queryOvertime,
+  getQuickStats,
+  approveAll,
   getOvertimeById,
   getOvertimeByEmployee,
   updateOvertimeById,

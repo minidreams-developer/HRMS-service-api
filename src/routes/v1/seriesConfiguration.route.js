@@ -1,17 +1,19 @@
 const express = require('express');
 const seriesConfiguration = require('../../controllers/seriesConfiguration.controller');
+const auth = require('../../middlewares/auth');
+const settingsAdmin = require('../../middlewares/settingsAdmin');
 
 const router = express.Router();
 
 router
   .route('/')
-  .post(seriesConfiguration.createSeriesConfiguration)
-  .get(seriesConfiguration.getAllSeriesConfiguration);
+  .post(auth(), settingsAdmin, seriesConfiguration.createSeriesConfiguration)
+  .get(auth(), settingsAdmin, seriesConfiguration.getAllSeriesConfiguration);
 
 router
   .route('/:seriesId')
-  .get(seriesConfiguration.getSeriesConfigurationById)
-  .patch(seriesConfiguration.updateSeriesConfiguration)
-  .delete(seriesConfiguration.deleteSeriesConfiguration);
+  .get(auth(), settingsAdmin, seriesConfiguration.getSeriesConfigurationById)
+  .patch(auth(), settingsAdmin, seriesConfiguration.updateSeriesConfiguration)
+  .delete(auth(), settingsAdmin, seriesConfiguration.deleteSeriesConfiguration);
 
 module.exports = router;

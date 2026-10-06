@@ -20,6 +20,15 @@ const getOvertime = catchAsync(async (req, res) => {
   res.send(result);
 });
 
+const getQuickStats = catchAsync(async (req, res) => {
+  if (!canManage(req.user)) throw new ApiError(httpStatus.FORBIDDEN, 'Only management may view overtime quick stats');
+  res.send(await overtimeManagementService.getQuickStats(req.query.period, req.query.fromDate, req.query.toDate));
+});
+
+const approveAll = catchAsync(async (req, res) => {
+  res.send(await overtimeManagementService.approveAll(req.query, req.user));
+});
+
 const getOvertimeById = catchAsync(async (req, res) => {
   const overtime = await overtimeManagementService.getOvertimeById(req.params.overtimeId);
   if (!overtime) {
@@ -58,6 +67,8 @@ const deleteOvertime = catchAsync(async (req, res) => {
 });
 
 module.exports = {
+  getQuickStats,
+  approveAll,
   createOvertime,
   getOvertime,
   getOvertimeById,

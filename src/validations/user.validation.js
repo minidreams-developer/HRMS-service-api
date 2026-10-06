@@ -31,6 +31,7 @@ const createUser = {
     password: Joi.string().required().custom(password),
     name: Joi.string().required(),
     role: Joi.string().required().valid(...ROLES),
+    roleId: Joi.string().custom(objectId).optional(),
   }),
 };
 
@@ -88,6 +89,7 @@ const updateUser = {
       email: Joi.string().email(),
       password: Joi.string().custom(password),
       name: Joi.string(),
+      roleId: Joi.string().custom(objectId),
       // Public API status maps to the User model's isActive field.
       status: Joi.string().custom(statusValidator),
       employee: Joi.object().keys({
@@ -112,6 +114,34 @@ const updateUser = {
     // through instead of rejecting them as unknown keys.
     .unknown(true)
     .min(1),
+};
+
+const updateProfile = {
+  body: Joi.object().keys({
+    name: Joi.string().trim(),
+    phone: Joi.number(),
+    profilePic: Joi.string().allow(''),
+    gender: Joi.string().valid('male', 'female', 'other'),
+    dateOfBirth: Joi.date().iso(),
+    age: Joi.number().integer().min(0),
+    spokenLanguages: Joi.array().items(Joi.string()),
+    martialStatus: Joi.string(),
+    motherTongue: Joi.string(),
+    identificationMark: Joi.string().allow(''),
+    religion: Joi.string().allow(''),
+    address: Joi.array().items(Joi.object().unknown(true)),
+    addresses: Joi.array().items(Joi.object().unknown(true)),
+    emergencyContact: Joi.array().items(Joi.object().unknown(true)),
+    emergencyContacts: Joi.array().items(Joi.object().unknown(true)),
+  }).min(1),
+};
+
+const changePassword = {
+  body: Joi.object().keys({
+    currentPassword: Joi.string().required(),
+    newPassword: Joi.string().required().custom(password),
+    confirmPassword: Joi.string().required().valid(Joi.ref('newPassword')),
+  }).min(3),
 };
 
 const getEmployeeByEmpId = {
@@ -143,5 +173,7 @@ module.exports = {
   getEmployeeByEmpId,
   getUsersDropdown,
   updateUser,
+  updateProfile,
+  changePassword,
   deleteUser,
 };

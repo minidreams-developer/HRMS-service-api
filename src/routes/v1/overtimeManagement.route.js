@@ -7,6 +7,14 @@ const auth = require('../../middlewares/auth');
 const router = express.Router();
 
 router
+  .route('/quick-stats')
+  .get(auth(), validate({ query: overtimeManagementValidation.getQuickStats }), overtimeController.getQuickStats);
+
+router
+  .route('/approve-all')
+  .patch(auth(), validate({ query: overtimeManagementValidation.approveAll }), overtimeController.approveAll);
+
+router
   .route('/')
   .post(auth(), validate(overtimeManagementValidation.createOvertime), overtimeController.createOvertime)
   .get(auth(), validate(overtimeManagementValidation.getOvertime), overtimeController.getOvertime);

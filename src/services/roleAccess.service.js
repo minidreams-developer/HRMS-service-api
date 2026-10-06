@@ -91,7 +91,8 @@ const deleteRoleById = async (roleId) => {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Cannot delete a system role');
   }
 
-  await role.deleteOne();
+  role.isActive = false;
+  await role.save();
   return role;
 };
 

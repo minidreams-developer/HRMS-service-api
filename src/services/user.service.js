@@ -1,5 +1,5 @@
 const httpStatus = require('http-status');
-const { User, Attendance, Asset, Address, BankDetails, SalaryDetails, Commission, Shift, ShiftAssignment, Branch, Department, Team, Designation } = require('../models');
+const { User, Role, Attendance, Asset, Address, BankDetails, SalaryDetails, Commission, Shift, ShiftAssignment, Branch, Department, Team, Designation } = require('../models');
 const EmergencyContact = require('../models/emergencyContact.model');
 const UserDocument = require('../models/userDocuments.model');
 const ApiError = require('../utils/ApiError');
@@ -23,6 +23,13 @@ const validateShiftAssignment = async (shiftId) => {
   const shift = await Shift.findById(shiftId).lean();
   if (!shift) throw new ApiError(httpStatus.BAD_REQUEST, 'Shift not found');
   if (!shift.isShiftActive) throw new ApiError(httpStatus.BAD_REQUEST, 'Inactive Shift cannot be assigned to a new employee');
+};
+const validateRoleId = async (roleId) => {
+  if (!roleId) return null;
+  if (!mongoose.Types.ObjectId.isValid(roleId)) throw new ApiError(httpStatus.BAD_REQUEST, 'Invalid roleId');
+  const role = await Role.findOne({ _id: roleId, isActive: true }).select('_id').lean();
+  if (!role) throw new ApiError(httpStatus.BAD_REQUEST, 'Role not found or inactive');
+  return role._id;
 };
 
 const refId = (value) => value && typeof value === 'object' && value._id ? value._id : value;
@@ -104,6 +111,7 @@ const normalizeFileUrl = (value) => {
  * @returns {Promise<User>}
  */
 const registerEmployee = async (body) => {
+  const roleId = await validateRoleId(body.roleId);
   await validateShiftAssignment(toObjectId(body.workInformation?.shiftId));
   if (body.email && (await User.isEmailTaken(body.email))) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Email already taken');
@@ -200,6 +208,7 @@ const registerEmployee = async (body) => {
     password: body.password,
     phone: body.phone,
     role: body.role || 'employee',
+    roleId,
     gender: body.gender,
     dateOfBirth: body.dateOfBirth,
     age: body.age,
@@ -291,12 +300,13 @@ const registerEmployee = async (body) => {
  * @returns {Promise<User>}
  */
 const createUser = async (userBody) => {
+  const roleId = await validateRoleId(userBody.roleId);
   if (userBody.email && (await User.isEmailTaken(userBody.email))) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Email already taken');
   }
   await validateShiftAssignment(toObjectId(userBody.workInformation?.shiftId));
   await validatePeopleAssignment(userBody.workInformation);
-  const user = await User.create(userBody);
+  const user = await User.create({ ...userBody, ...(roleId ? { roleId } : {}) });
   if (user.workInformation?.shiftId) await ShiftAssignment.create({ employeeId: user._id, shiftId: user.workInformation.shiftId, effectiveFrom: new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate())), reason: 'Initial employee assignment' });
   return user;
 };
@@ -318,6 +328,9 @@ const populateWorkInfo = async (docs) => {
   ];
 
   for (const doc of docs) {
+    if (doc.roleId && isObjectId(doc.roleId)) {
+      await mongoose.model('Role').populate(doc, { path: 'roleId', select: 'name description isActive' });
+    }
     for (const { path, model, select } of fields) {
       const key = path.split('.')[1];
       const val = doc.workInformation?.[key];
@@ -609,6 +622,7 @@ const updateUserById = async (userId, updateBody) => {
     throw new ApiError(httpStatus.NOT_FOUND, 'User not found');
   }
   if (updateBody.workInformation?.shiftId) await validateShiftAssignment(toObjectId(updateBody.workInformation.shiftId));
+  if (updateBody.roleId !== undefined) updateBody.roleId = await validateRoleId(updateBody.roleId);
   if (updateBody.email && (await User.isEmailTaken(updateBody.email, userId))) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Email already taken');
   }
@@ -781,6 +795,31 @@ const updateUserById = async (userId, updateBody) => {
   await user.save();
 
   // Re-fetch with full population so response includes populated team, department, etc.
+  return getUserById(userId);
+};
+
+const getProfile = async (userId) => getUserById(userId);
+
+const updateProfile = async (userId, updateBody) => {
+  const allowed = [
+    'name', 'phone', 'profilePic', 'gender', 'dateOfBirth', 'age', 'spokenLanguages',
+    'martialStatus', 'motherTongue', 'identificationMark', 'religion', 'address',
+    'addresses', 'emergencyContact', 'emergencyContacts',
+  ];
+  const update = Object.fromEntries(Object.entries(updateBody).filter(([key]) => allowed.includes(key)));
+  return updateUserById(userId, update);
+};
+
+const changePassword = async (userId, currentPassword, newPassword) => {
+  const user = await User.findById(userId).select('+password');
+  if (!user || !(await user.isPasswordMatch(currentPassword))) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Current password is incorrect');
+  }
+  if (currentPassword === newPassword) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'New password must be different from current password');
+  }
+  user.password = newPassword;
+  await user.save();
   return getUserById(userId);
 };
 
@@ -1322,6 +1361,9 @@ module.exports = {
   getUserByEmployeeId,
   getUserByEmail,
   updateUserById,
+  getProfile,
+  updateProfile,
+  changePassword,
   deleteUserById,
   generateEmployeeId,
   generateStaffId,

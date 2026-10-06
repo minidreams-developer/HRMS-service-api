@@ -35,10 +35,15 @@ const permissionRoute = require('./permission.route');
 const shiftAssignmentRoute = require('./shiftAssignment.route');
 const dayOffRoute = require('./dayOff.route');
 const designationRoute = require('./designation.route');
+const profileRoute = require('./profile.route');
 
 const router = express.Router();
 
 const defaultRoutes = [
+  {
+    path: '/profile',
+    route: profileRoute,
+  },
   {
     path: '/auth',
     route: authRoute,

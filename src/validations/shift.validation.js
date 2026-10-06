@@ -65,6 +65,9 @@ const shiftBody = Joi.object().keys({
   halfDayWorkingHours: workingHoursString,
   overtimeAfterHours: Joi.number().greater(0).optional(),
 }).unknown(true).custom((value, helpers) => {
+  // Rotational shifts inherit working-hour rules from their resolved child
+  // shift, so zero placeholder values are valid on the wrapper record.
+  if (value.shiftType === 'Rotational') return value;
   if (value.minWorkingHours || value.halfDayWorkingHours) {
     if (!value.minWorkingHours || !value.halfDayWorkingHours) return helpers.error('any.invalid');
     const full = Number.parseFloat(value.minWorkingHours);

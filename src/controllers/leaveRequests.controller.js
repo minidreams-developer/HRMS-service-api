@@ -32,6 +32,11 @@ const getLeaveRequests = catchAsync(async (req, res) => {
   res.send(result);
 });
 
+const getQuickStats = catchAsync(async (req, res) => {
+  if (!canManage(req.user)) throw new ApiError(httpStatus.FORBIDDEN, 'Only management may view leave quick stats');
+  res.send(await leaveRequestsService.getQuickStats(req.query.period, req.query.fromDate, req.query.toDate));
+});
+
 const getLeaveRequestsById = catchAsync(async (req, res) => {
   const leaveRequest = await leaveRequestsService.getLeaveRequestsById(req.params.leaveRequestId);
   if (!leaveRequest) {
@@ -74,6 +79,7 @@ const deleteLeaveRequests = catchAsync(async (req, res) => {
 });
 
 module.exports = {
+  getQuickStats,
   createLeaveRequests,
   getLeaveRequests,
   getLeaveRequestsById,

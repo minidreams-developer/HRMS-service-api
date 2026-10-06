@@ -37,6 +37,52 @@ const getRequestDates = (body) => {
   return { start, end };
 };
 
+const getQuickStats = async (period = 'today', fromDate, toDate) => {
+  const now = new Date();
+  const start = fromDate ? utcDay(fromDate) : utcDay(now);
+  const end = toDate
+    ? endOfDay(toDate)
+    : period === 'today'
+      ? endOfDay(start)
+      : period === 'week'
+        ? new Date(start.getTime() + (7 * 86400000) - 1)
+        : new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 0, 23, 59, 59, 999));
+  if (end < start) throw new ApiError(httpStatus.BAD_REQUEST, 'toDate must be on or after fromDate');
+  const leaveRecords = await LeaveRequests.find({
+    $or: [
+      { singleDate: { $gte: start, $lte: end } },
+      { startDate: { $lte: end }, endDate: { $gte: start } },
+    ],
+  }).populate('employeeId', 'role').lean();
+  const requestRecords = await LeaveRequests.find({
+    createdAt: { $gte: start, $lte: end },
+  }).lean();
+  const stats = {
+    leavesToday: leaveRecords.length,
+    pendingRequests: requestRecords.filter((leave) => leave.status === 'pending').length,
+    approvedRequests: requestRecords.filter((leave) => leave.status === 'approved').length,
+    rejectedRequests: requestRecords.filter((leave) => leave.status === 'rejected').length,
+    employeeLeaves: 0,
+    staffLeaves: 0,
+    halfDayLeaves: 0,
+    permissions: 0,
+  };
+  leaveRecords.forEach((leave) => {
+    if (leave.employeeId?.role === 'employee') stats.employeeLeaves += 1;
+    if (leave.employeeId?.role === 'staff') stats.staffLeaves += 1;
+    if (leave.leaveDuration === 'halfDay') stats.halfDayLeaves += 1;
+  });
+  const Permission = mongoose.model('Permission');
+  stats.permissions = await Permission.countDocuments({
+    permissionStatus: { $in: ['pending', 'approved'] },
+    $or: [
+      { date: { $gte: start, $lte: end } },
+      { from: { $lte: end }, to: { $gte: start } },
+    ],
+  });
+  return { period, fromDate: start, toDate: end, ...stats };
+};
+
 const getEmployeeContext = async (employeeId, effectiveDate = new Date()) => {
   const employee = await User.findById(employeeId).lean();
   if (!employee) throw new ApiError(httpStatus.NOT_FOUND, 'Employee not found');
@@ -352,6 +398,7 @@ const deleteLeaveRequestsById = async (id) => {
 };
 
 module.exports = {
+  getQuickStats,
   createLeaveRequests,
   queryLeaveRequests,
   getLeaveRequestsById,
