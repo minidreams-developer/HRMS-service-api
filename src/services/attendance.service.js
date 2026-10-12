@@ -162,6 +162,36 @@ const populateAttendance = async (docs) => {
   }
 };
 
+const validateAttendanceDay = async (employeeId, attendanceDay) => {
+  const day = utcDay(attendanceDay);
+  const nextDay = new Date(day.getTime() + 86400000);
+  const employeeObjectId = isObjectId(employeeId) ? new mongoose.Types.ObjectId(employeeId) : employeeId;
+
+  const holiday = await Holiday.findOne({
+    status: true,
+    date: { $gte: day, $lt: nextDay },
+    $or: [
+      { people: { $size: 0 } },
+      { people: { $exists: false } },
+      { people: employeeObjectId },
+    ],
+  }).lean();
+  if (holiday) throw new ApiError(httpStatus.BAD_REQUEST, 'Attendance cannot be created on a holiday');
+
+  const leave = await LeaveRequests.findOne({
+    employeeId: employeeObjectId,
+    status: 'approved',
+    $or: [
+      { singleDate: { $gte: day, $lt: nextDay } },
+      { startDate: { $lte: day }, endDate: { $gte: day } },
+    ],
+  }).lean();
+  if (leave) throw new ApiError(httpStatus.BAD_REQUEST, 'Attendance cannot be created during approved leave');
+
+  const dayOff = await DayOff.findOne({ employeeId: employeeObjectId, status: true, date: { $gte: day, $lt: nextDay } }).lean();
+  if (dayOff) throw new ApiError(httpStatus.BAD_REQUEST, 'Attendance cannot be created on a day off');
+};
+
 /**
  * Create an attendance record
  */
@@ -176,6 +206,7 @@ const createAttendance = async (body, actorId) => {
   }
   const attendance = await deriveAttendance(body);
   attendance.attendanceDay = utcDay(attendance.date);
+  await validateAttendanceDay(attendance.employeeId, attendance.attendanceDay);
   attendance.createdBy = actorId;
   attendance.creationSource = 'manual';
   attendance.createdReason = body.createdReason;
@@ -323,6 +354,7 @@ const updateAttendanceById = async (id, updateBody, editor) => {
   });
   if (Object.prototype.hasOwnProperty.call(editable, 'date')) {
     updated.attendanceDay = utcDay(editable.date);
+    await validateAttendanceDay(attendance.employeeId, updated.attendanceDay);
     const duplicate = await Attendance.findOne({
       employeeId: attendance.employeeId,
       date: { $gte: updated.attendanceDay, $lt: new Date(updated.attendanceDay.getTime() + 86400000) },

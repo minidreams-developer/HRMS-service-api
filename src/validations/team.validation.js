@@ -22,6 +22,7 @@ const getTeams = {
     teamCode:     Joi.string().optional(),
     teamLead:     Joi.string().optional(),
     departmentId: Joi.string().custom(objectId).optional(),
+    branchId:     Joi.string().custom(objectId).optional(),
     isActive: Joi.boolean().optional(),
     // pagination & sorting
     sortBy:       Joi.string().optional(),

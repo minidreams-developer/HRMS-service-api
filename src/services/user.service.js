@@ -1007,11 +1007,34 @@ const getUsersDropdown = async (filters = {}) => {
 
   // Fetch users with minimal fields for dropdown
   const users = await User.find(query)
-    .select('_id name employeeId role email profilePic')
+    .select('_id name employeeId role email profilePic workInformation.shiftId')
     .sort({ name: 1 })
     .lean();
 
-  return users;
+  const shiftIds = users
+    .map((user) => user.workInformation?.shiftId)
+    .filter((value) => value && mongoose.Types.ObjectId.isValid(String(value)))
+    .map((value) => new mongoose.Types.ObjectId(String(value)));
+  const shifts = await Shift.find({ _id: { $in: shiftIds } })
+    .select('_id shiftName shiftCode')
+    .lean();
+  const shiftsById = new Map(shifts.map((shift) => [String(shift._id), shift]));
+
+  return users.map((user) => {
+    const shiftId = user.workInformation?.shiftId || null;
+    const shift = shiftId ? shiftsById.get(String(shiftId)) : null;
+    return {
+      _id: user._id,
+      name: user.name,
+      employeeId: user.employeeId,
+      role: user.role,
+      email: user.email,
+      profilePic: user.profilePic,
+      shiftId: shiftId || null,
+      shiftName: shift?.shiftName || null,
+      shiftCode: shift?.shiftCode || null,
+    };
+  });
 }
 
 // const getDistinctStatus = async()=>

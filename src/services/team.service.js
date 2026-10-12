@@ -69,6 +69,10 @@ const queryTeams = async (filter, options) => {
   if (filter.departmentId) {
     mongoFilter.department = filter.departmentId;
   }
+  if (filter.branchId) {
+    const branchDepartments = await Department.find({ branchId: filter.branchId }).select('_id').lean();
+    mongoFilter.department = { $in: branchDepartments.map((department) => department._id) };
+  }
   // Exclude soft-deactivated teams by default. Pass isActive=false explicitly
   // when management needs to view historical/deactivated teams.
   mongoFilter.isActive = filter.isActive !== undefined ? filter.isActive : true;
