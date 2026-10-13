@@ -108,6 +108,13 @@ const deleteAttendance = {
   }),
 };
 
+const getQuickStats = {
+  query: Joi.object().keys({
+    fromDate: Joi.date().iso().optional(),
+    toDate: Joi.date().iso().min(Joi.ref('fromDate')).optional(),
+  }),
+};
+
 module.exports = {
   createAttendance,
   getAttendances,
@@ -117,4 +124,5 @@ module.exports = {
   getEmployeeAttendanceCalendar,
   updateAttendance,
   deleteAttendance,
+  getQuickStats,
 };

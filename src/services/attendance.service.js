@@ -196,20 +196,26 @@ const validateAttendanceDay = async (employeeId, attendanceDay) => {
  * Create an attendance record
  */
 const createAttendance = async (body, actorId) => {
-  const employee = await User.findById(body.employeeId).lean();
+  // New attendance records must persist references as MongoDB ObjectIds.
+  const normalizedBody = {
+    ...body,
+    employeeId: new mongoose.Types.ObjectId(body.employeeId),
+    shiftId: body.shiftId ? new mongoose.Types.ObjectId(body.shiftId) : body.shiftId,
+  };
+  const employee = await User.findById(normalizedBody.employeeId).lean();
   if (!employee || employee.isDeleted === true) throw new ApiError(httpStatus.NOT_FOUND, 'Employee not found');
   if (employee.isActive !== 'Active') throw new ApiError(httpStatus.BAD_REQUEST, 'Relieved employee cannot create Attendance');
-  if (body.shiftId) {
-    const explicitShift = await Shift.findById(body.shiftId).lean();
+  if (normalizedBody.shiftId) {
+    const explicitShift = await Shift.findById(normalizedBody.shiftId).lean();
     if (!explicitShift) throw new ApiError(httpStatus.NOT_FOUND, 'Shift not found');
     if (explicitShift.isShiftActive === false) throw new ApiError(httpStatus.BAD_REQUEST, 'Inactive Shift cannot be selected for new Attendance');
   }
-  const attendance = await deriveAttendance(body);
+  const attendance = await deriveAttendance(normalizedBody);
   attendance.attendanceDay = utcDay(attendance.date);
   await validateAttendanceDay(attendance.employeeId, attendance.attendanceDay);
   attendance.createdBy = actorId;
   attendance.creationSource = 'manual';
-  attendance.createdReason = body.createdReason;
+  attendance.createdReason = normalizedBody.createdReason;
   const duplicate = await Attendance.findOne({
     employeeId: attendance.employeeId,
     date: { $gte: attendance.attendanceDay, $lt: new Date(attendance.attendanceDay.getTime() + 86400000) },
@@ -245,8 +251,14 @@ const queryAttendances = async (filter, options) => {
   const intersectEmployeeIds = async (ids) => {
     const current = mongoFilter.employeeId?.$in;
     const allowed = new Set(ids.map(String));
-    if (current) mongoFilter.employeeId.$in = current.filter((item) => allowed.has(String(item)));
-    else mongoFilter.employeeId = { $in: ids };
+    if (current) {
+      mongoFilter.employeeId.$in = current.filter((item) => allowed.has(String(item)));
+    } else {
+      // Attendance has legacy Mixed values, so support both string and ObjectId forms.
+      mongoFilter.employeeId = {
+        $in: ids.flatMap((id) => (isObjectId(id) ? [id, new mongoose.Types.ObjectId(id)] : [id])),
+      };
+    }
   };
 
   // Search — resolve user IDs first, then scope attendance records
@@ -308,18 +320,26 @@ const queryAttendances = async (filter, options) => {
     const d = new Date(filter.date);
     const start = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0, 0, 0));
     const end   = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 23, 59, 59, 999));
-    mongoFilter.date = { $gte: start, $lte: end };
+    mongoFilter.$and = (mongoFilter.$and || []).concat({
+      $or: [
+        { attendanceDay: { $gte: start, $lte: end } },
+        { attendanceDay: { $exists: false }, date: { $gte: start, $lte: end } },
+      ],
+    });
   }
 
   // Date range filter
   if (filter.fromDate || filter.toDate) {
-    mongoFilter.date = {};
-    if (filter.fromDate) mongoFilter.date.$gte = new Date(filter.fromDate);
-    if (filter.toDate) {
-      const end = new Date(filter.toDate);
-      end.setUTCHours(23, 59, 59, 999);
-      mongoFilter.date.$lte = end;
-    }
+    const start = filter.fromDate ? utcDay(filter.fromDate) : new Date(0);
+    const end = filter.toDate
+      ? new Date(utcDay(filter.toDate).getTime() + 86399999)
+      : new Date('9999-12-31T23:59:59.999Z');
+    mongoFilter.$and = (mongoFilter.$and || []).concat({
+      $or: [
+        { attendanceDay: { $gte: start, $lte: end } },
+        { attendanceDay: { $exists: false }, date: { $gte: start, $lte: end } },
+      ],
+    });
   }
 
   const result = await Attendance.paginate(mongoFilter, options);
@@ -619,6 +639,26 @@ const getPresentEmployeesToday = async (date = new Date(), role = null, filters 
   }));
 };
 
+const getQuickStats = async (fromDate, toDate) => {
+  const start = utcDay(fromDate || new Date());
+  const end = new Date(utcDay(toDate || fromDate || new Date()).getTime() + 86400000);
+  const records = await Attendance.find({
+    $or: [
+      { attendanceDay: { $gte: start, $lt: end } },
+      { attendanceDay: { $exists: false }, date: { $gte: start, $lt: end } },
+    ],
+  }).select('timingStatus attendanceStatus').lean();
+
+  const stats = { totalRecords: records.length, onTime: 0, earlyOut: 0, arrivedLate: 0 };
+  for (const record of records) {
+    const status = record.timingStatus || record.attendanceStatus;
+    if (status === 'onTime') stats.onTime += 1;
+    if (status === 'earlyOut') stats.earlyOut += 1;
+    if (status === 'arrivedLate') stats.arrivedLate += 1;
+  }
+  return { fromDate: start, toDate: new Date(end.getTime() - 1), ...stats };
+};
+
 module.exports = {
   createAttendance,
   queryAttendances,
@@ -629,4 +669,5 @@ module.exports = {
   getEmployeeAttendance,
   getEmployeeCalendar,
   getPresentEmployeesToday,
+  getQuickStats,
 };

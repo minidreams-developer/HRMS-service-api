@@ -40,6 +40,10 @@ const getPresentEmployeesToday = catchAsync(async (req, res) => {
   res.send({ date: req.query.date || new Date().toISOString().slice(0, 10), role: req.query.role || 'employee,staff', filters, results: await attendanceService.getPresentEmployeesToday(req.query.date, req.query.role, filters) });
 });
 
+const getQuickStats = catchAsync(async (req, res) => {
+  res.send(await attendanceService.getQuickStats(req.query.fromDate, req.query.toDate));
+});
+
 const getEmployeeAttendanceSummary = catchAsync(async (req, res) => {
   if (!canReadEmployeeAttendance(req)) throw new ApiError(httpStatus.FORBIDDEN, 'Forbidden');
   const summary = await attendanceService.getEmployeeAttendanceSummary(
@@ -77,6 +81,7 @@ module.exports = {
   getAttendances,
   getAttendance,
   getPresentEmployeesToday,
+  getQuickStats,
   getEmployeeAttendanceSummary,
   getEmployeeAttendance,
   getEmployeeCalendar,

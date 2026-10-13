@@ -16,6 +16,9 @@ router.route('/present-today').get(auth(), (req, res, next) => {
   return attendanceController.getPresentEmployeesToday(req, res, next);
 });
 
+router.route('/quick-stats')
+  .get(auth(), validate(attendanceValidation.getQuickStats), attendanceController.getQuickStats);
+
 router
   .route('/employee/:employeeId/summary')
   .get(auth(), validate(attendanceValidation.getEmployeeAttendanceSummary), attendanceController.getEmployeeAttendanceSummary);
