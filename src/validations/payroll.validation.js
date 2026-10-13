@@ -3,7 +3,7 @@ const { objectId } = require('./custom.validation');
 
 const getPayrollList = {
   query: Joi.object().keys({
-    role:         Joi.string().valid('employee', 'staff').optional(),
+    role:         Joi.string().valid('employee', 'staff', 'contractor', 'agent').optional(),
     month:        Joi.number().integer().min(1).max(12).optional(),
     year:         Joi.number().integer().min(2000).max(2100).optional(),
     // search across employee name, employeeId, email
@@ -12,6 +12,7 @@ const getPayrollList = {
     departmentId: Joi.string().custom(objectId).optional(),
     shiftId:      Joi.string().custom(objectId).optional(),
     branchId:     Joi.string().custom(objectId).optional(),
+    designation:  Joi.string().allow('').optional(),
     // payroll status filter
     status:       Joi.string().valid('draft', 'processed', 'paid', 'stopped', 'resumed').optional(),
     // pagination & sorting
@@ -24,6 +25,24 @@ const getPayrollList = {
 const getPayrollPeriods = {
   query: Joi.object().keys({
     year: Joi.number().integer().min(2000).max(2100).optional(),
+  }),
+};
+
+const getPayrollAbstractSummary = {
+  query: Joi.object().keys({
+    month: Joi.number().integer().min(1).max(12).required(),
+    year: Joi.number().integer().min(2000).max(2100).required(),
+  }),
+};
+
+const getPayrollAbstractExport = {
+  query: Joi.object().keys({
+    month: Joi.number().integer().min(1).max(12).required(),
+    year: Joi.number().integer().min(2000).max(2100).required(),
+    type: Joi.string().valid('employee', 'staff', 'contractor', 'agent', 'summary').required(),
+    search: Joi.string().allow('').optional(),
+    designation: Joi.string().allow('').optional(),
+    departmentId: Joi.string().custom(objectId).optional(),
   }),
 };
 
@@ -184,6 +203,8 @@ const getStoppedPayrolls = {
 module.exports = {
   getPayrollList,
   getPayrollPeriods,
+  getPayrollAbstractSummary,
+  getPayrollAbstractExport,
   finalizePayrollPeriod,
   getFinalizedPayrollPeriods,
   getPayrollAbstract,

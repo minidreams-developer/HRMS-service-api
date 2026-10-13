@@ -12,7 +12,7 @@ const managementRoles = new Set(['manager', 'hr_manager', 'subAdmin', 'admin']);
  * Query params: month, year, departmentId, shiftId, search, page, limit, sortBy
  */
 const getPayrollList = catchAsync(async (req, res) => {
-  const query   = pick(req.query, ['role', 'month', 'year', 'departmentId', 'shiftId', 'branchId', 'search', 'status']);
+  const query   = pick(req.query, ['role', 'month', 'year', 'departmentId', 'shiftId', 'branchId', 'designation', 'search', 'status']);
   const options = pick(req.query, ['sortBy', 'limit', 'page']);
   const result  = await payrollService.getPayrollList(query, options);
   res.send(result);
@@ -20,6 +20,19 @@ const getPayrollList = catchAsync(async (req, res) => {
 
 const getPayrollPeriods = catchAsync(async (req, res) => {
   res.send(await payrollService.getPayrollPeriods(req.query.year));
+});
+
+const getPayrollAbstractSummary = catchAsync(async (req, res) => {
+  res.send(await payrollService.getPayrollAbstractSummary(req.query));
+});
+
+const getPayrollAbstractExport = catchAsync(async (req, res) => {
+  const data = await payrollService.getPayrollAbstractExport(req.query);
+  const rows = data.results || data.data || [data];
+  const keys = rows.length ? [...new Set(rows.flatMap((row) => Object.keys(row)))] : ['message'];
+  const escape = (value) => `"${String(value ?? '').replace(/"/g, '""')}"`;
+  const csv = [keys, ...rows.map((row) => keys.map((key) => (typeof row[key] === 'object' ? JSON.stringify(row[key]) : row[key])))].map((row) => row.map(escape).join(',')).join('\n');
+  res.type('text/csv').attachment(`payroll-abstract-${req.query.type}-${req.query.year}-${req.query.month}.csv`).send(csv);
 });
 
 const finalizePayrollPeriod = catchAsync(async (req, res) => {
@@ -191,6 +204,8 @@ const getStoppedPayrolls = catchAsync(async (req, res) => {
 module.exports = {
   getPayrollList,
   getPayrollPeriods,
+  getPayrollAbstractSummary,
+  getPayrollAbstractExport,
   finalizePayrollPeriod,
   getFinalizedPayrollPeriods,
   getPayrollAbstract,

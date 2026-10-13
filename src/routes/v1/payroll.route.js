@@ -30,6 +30,14 @@ router
   .get(auth('manageAttendance'), validate(payrollValidation.getPayrollPeriods), payrollController.getPayrollPeriods);
 
 router
+  .route('/abstract/summary')
+  .get(auth('manageAttendance'), validate(payrollValidation.getPayrollAbstractSummary), payrollController.getPayrollAbstractSummary);
+
+router
+  .route('/abstract/export')
+  .get(auth('manageAttendance'), validate(payrollValidation.getPayrollAbstractExport), payrollController.getPayrollAbstractExport);
+
+router
   .route('/periods/:year/:month/finalize')
   .post(auth('manageAttendance'), validate(payrollValidation.finalizePayrollPeriod), payrollController.finalizePayrollPeriod);
 

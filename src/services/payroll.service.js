@@ -250,6 +250,9 @@ const getPayrollList = async (query, options) => {
   const page  = parseInt(options.page,  10) > 0 ? parseInt(options.page,  10) : 1;
   const skip  = (page - 1) * limit;
 
+  if (query.role === 'contractor') return getContractorAbstractList(query, { page, limit });
+  if (query.role === 'agent') return getAgentAbstractList(query, { page, limit });
+
   // ── Build user match stage ────────────────────────────────────────────────
   const userMatch = {
     role: { $in: ['employee', 'staff'] },
@@ -272,6 +275,13 @@ const getPayrollList = async (query, options) => {
 
   if (query.branchId && mongoose.Types.ObjectId.isValid(query.branchId)) {
     userMatch['workInformation.branch'] = new mongoose.Types.ObjectId(query.branchId);
+  }
+  if (query.designation) {
+    const designationMatch = { $or: [{ 'workInformation.designation': query.designation }] };
+    if (mongoose.Types.ObjectId.isValid(query.designation)) designationMatch.$or.push({ 'workInformation.designationId': new mongoose.Types.ObjectId(query.designation) });
+    userMatch.$and = userMatch.$and || [];
+    if (userMatch.$or) { userMatch.$and.push({ $or: userMatch.$or }); delete userMatch.$or; }
+    userMatch.$and.push(designationMatch);
   }
   if (query.role && ['employee', 'staff'].includes(query.role)) userMatch.role = query.role;
 
@@ -363,6 +373,94 @@ const getPayrollList = async (query, options) => {
     totalPfAmount,
     totalEsiAmount,
   };
+};
+
+const paginateAbstractRows = (rows, page, limit) => ({
+  results: rows.slice((page - 1) * limit, page * limit), page, limit,
+  totalResults: rows.length, totalPages: Math.ceil(rows.length / limit),
+});
+
+const getContractorAbstractList = async (query, options) => {
+  const filter = { month: Number(query.month) || new Date().getUTCMonth() + 1, year: Number(query.year) || new Date().getUTCFullYear() };
+  if (query.status) filter.status = query.status;
+  const settlements = await ContractorSettlement.find(filter).populate('contractorId', 'name employeeId role workInformation').sort({ createdAt: -1 }).lean();
+  const search = String(query.search || '').toLowerCase();
+  const rows = settlements.filter((row) => !search || `${row.contractorId?.name || ''} ${row.contractorId?.employeeId || ''}`.toLowerCase().includes(search)).map((row) => ({
+    _id: row._id, settlementId: row._id, contractorId: row.contractorId?._id || row.contractorId,
+    contractorName: row.contractorId?.name || null, employeeId: row.contractorId?.employeeId || null,
+    role: 'contractor', month: row.month, year: row.year, workerCount: row.workerItems?.length || 0,
+    earnedPay: row.totalShare, grossPay: row.totalShare, payableSalary: row.totalShare,
+    additions: null, deductions: null, cashDisbursement: null, bankDisbursement: null, status: row.status,
+  }));
+  return paginateAbstractRows(rows, options.page, options.limit);
+};
+
+const getAgentAbstractList = async (query, options) => {
+  const filter = { role: 'agent', isActive: 'Active', isDeleted: { $ne: true } };
+  if (query.branchId && mongoose.Types.ObjectId.isValid(query.branchId)) filter['workInformation.branch'] = new mongoose.Types.ObjectId(query.branchId);
+  const agents = await User.find(filter).populate('commissionDetails').sort({ name: 1 }).lean();
+  const search = String(query.search || '').toLowerCase();
+  const rows = agents.filter((agent) => !search || `${agent.name || ''} ${agent.agentId || ''}`.toLowerCase().includes(search)).map((agent) => ({
+    _id: agent._id, agentId: agent.agentId || null, name: agent.name, role: 'agent',
+    commission: agent.commissionDetails?.commission ?? null, allowance: agent.commissionDetails?.allowance ?? null,
+    salaryDisbursementType: agent.commissionDetails?.salaryDisbursementType ?? null,
+    payoutAvailable: false, totalSalary: null, payableSalary: null, cashDisbursement: null, bankDisbursement: null,
+    totalShifts: null,
+  }));
+  return paginateAbstractRows(rows, options.page, options.limit);
+};
+
+const buildDepartmentLedger = async (month, year, employeeRows, staffRows) => {
+  const finalized = await PayrollPeriod.exists({ month, year, status: 'finalized' });
+  let rows = [...employeeRows.results, ...staffRows.results];
+  if (finalized) {
+    const snapshots = await Payroll.find({ month, year, status: { $in: ['processed', 'paid'] } }).select('snapshot').lean();
+    rows = snapshots.map((row) => ({
+      department: row.snapshot?.employee?.department || null,
+      fullDays: row.snapshot?.fullDays || 0, overtimeHours: row.snapshot?.overtimeHours || 0,
+      overtimeAmount: row.snapshot?.overtimeAmount || 0, grossEarnings: row.snapshot?.grossEarnings || 0,
+      takeHome: row.snapshot?.takeHome || 0, deductions: 0,
+    }));
+  }
+  const groups = new Map();
+  for (const row of rows) {
+    const name = row.department || 'Unassigned';
+    const key = String(name);
+    const group = groups.get(key) || { departmentId: mongoose.Types.ObjectId.isValid(key) ? key : null, departmentName: name, employeeCount: 0, basicPay: null, overtimeAmount: 0, overtimeHours: 0, additions: null, grossTotal: 0, deductions: 0, netPayable: 0, cashDisbursement: null, bankDisbursement: null };
+    group.employeeCount += 1; group.overtimeAmount += Number(row.overtimeAmount) || 0; group.overtimeHours += Number(row.overtimeHours) || 0;
+    group.grossTotal += Number(row.grossEarnings) || 0; group.deductions += Number(row.totalDeductions || row.deductions) || 0; group.netPayable += Number(row.takeHome) || 0;
+    groups.set(key, group);
+  }
+  return [...groups.values()].map((group) => ({ ...group, overtimeAmount: Number(group.overtimeAmount.toFixed(2)), grossTotal: Number(group.grossTotal.toFixed(2)), deductions: Number(group.deductions.toFixed(2)), netPayable: Number(group.netPayable.toFixed(2)) }));
+};
+
+const getPayrollAbstractSummary = async (query) => {
+  const options = { page: 1, limit: 100 };
+  const base = { month: query.month, year: query.year };
+  const [employees, staff, contractors, agents] = await Promise.all([
+    getPayrollList({ ...base, role: 'employee' }, options), getPayrollList({ ...base, role: 'staff' }, options),
+    getContractorAbstractList(base, options), getAgentAbstractList(base, options),
+  ]);
+  const total = (rows, field) => rows.results.reduce((sum, row) => sum + (Number(row[field]) || 0), 0);
+  const departmentLedger = await buildDepartmentLedger(Number(query.month), Number(query.year), employees, staff);
+  return {
+    month: Number(query.month), year: Number(query.year),
+    totalSalary: total(employees, 'grossEarnings') + total(staff, 'grossEarnings') + total(contractors, 'grossPay'),
+    payableSalary: total(employees, 'takeHome') + total(staff, 'takeHome') + total(contractors, 'payableSalary'),
+    cashInHand: null, bankBalance: null, cashBankAvailable: false,
+    employeeTypeMaster: { employees: employees.results, staff: staff.results, contractors: contractors.results },
+    agentLedger: agents.results,
+    departmentLedger,
+    payrollSummary: { departmentCount: departmentLedger.length, employeeTypeCount: employees.totalResults + staff.totalResults, contractorCount: contractors.totalResults, agentCount: agents.totalResults, cashDisbursement: null, bankDisbursement: null, totalDisbursement: null },
+  };
+};
+
+const getPayrollAbstractExport = async (query) => {
+  const options = { page: 1, limit: 100 };
+  if (query.type === 'summary') return getPayrollAbstractSummary(query);
+  if (query.type === 'contractor') return getContractorAbstractList(query, options);
+  if (query.type === 'agent') return getAgentAbstractList(query, options);
+  return getPayrollList({ ...query, role: query.type }, options);
 };
 
 const calculatePeriodTotal = async (month, year) => {
@@ -902,6 +1000,8 @@ module.exports = {
   computePayrollForEmployee,
   getPayrollList,
   getPayrollPeriods,
+  getPayrollAbstractSummary,
+  getPayrollAbstractExport,
   finalizePayrollPeriod,
   getFinalizedPayrollPeriods,
   getPayrollAbstract,
