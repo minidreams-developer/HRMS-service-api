@@ -56,6 +56,11 @@ describe('PAYHUB-PERIOD-01 payroll periods', () => {
     await User.updateOne({ _id: employee._id }, { 'workInformation.SalaryDetails': id() });
     const listed = await payrollService.getPayrollPeriods(year);
     expect(listed.data.find((period) => period.month === month)).toMatchObject({ status: 'finalized', payout, payoutType: 'final' });
+    const history = await request(app).get(`/v1/payroll/periods/finalized?year=${year}&search=September`).set({ Authorization: `Bearer ${token(admin)}` }).expect(httpStatus.OK);
+    expect(history.body.data).toHaveLength(1);
+    expect(history.body.data[0]).toMatchObject({ month, totalPayout: payout, netPayout: payout });
+    const abstract = await request(app).get(`/v1/payroll/periods/${year}/${month}/abstract`).set({ Authorization: `Bearer ${token(admin)}` }).expect(httpStatus.OK);
+    expect(abstract.body.totalPayout).toBe(payout);
 
     const second = await request(app).post(`/v1/payroll/periods/${year}/${month}/finalize`).set({ Authorization: `Bearer ${token(admin)}` }).expect(httpStatus.OK);
     expect(String(second.body.id || second.body._id)).toBe(String(first.body.id || first.body._id));

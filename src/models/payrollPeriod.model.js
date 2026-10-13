@@ -7,6 +7,12 @@ const payrollPeriodSchema = new mongoose.Schema({
   status: { type: String, enum: ['finalized'], default: 'finalized' },
   totalPayout: { type: Number, required: true, min: 0 },
   payrollCount: { type: Number, required: true, min: 0 },
+  breakdown: {
+    employees: { count: { type: Number, default: 0 }, amount: { type: Number, default: 0 } },
+    staff: { count: { type: Number, default: 0 }, amount: { type: Number, default: 0 } },
+    agents: { count: { type: Number, default: 0 }, amount: { type: Number, default: 0 } },
+    contractors: { count: { type: Number, default: 0 }, amount: { type: Number, default: 0 } },
+  },
   finalizedAt: { type: Date, required: true },
   finalizedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
 }, { timestamps: true });

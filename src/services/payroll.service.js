@@ -1,6 +1,6 @@
 const httpStatus = require('http-status');
 const mongoose = require('mongoose');
-const { User, Attendance, LeaveRequests, LeaveBalance, Overtime, Payroll, PayrollPeriod } = require('../models');
+const { User, Attendance, LeaveRequests, LeaveBalance, Overtime, Payroll, PayrollPeriod, ContractorSettlement } = require('../models');
 const ApiError = require('../utils/ApiError');
 const { calculateLeaveDays } = require('./leaveRequests.service');
 const { detectOverlappingOvertime } = require('./overtimeOverlap.service');
@@ -317,6 +317,7 @@ const getPayrollList = async (query, options) => {
         _id: emp._id,
         employeeId: emp.employeeId,
         name: emp.name,
+        role: emp.role,
         designation: emp.workInformation?.designation || null,
         department: departmentName,
         profilePic: emp.profilePic || null,
@@ -367,6 +368,63 @@ const calculatePeriodTotal = async (month, year) => {
   };
 };
 
+const calculateFinalizedBreakdown = async (month, year) => {
+  const first = await getPayrollList({ month, year }, { page: 1, limit: 100 });
+  let rows = first.results;
+  for (let page = 2; page <= first.totalPages; page += 1) {
+    const next = await getPayrollList({ month, year }, { page, limit: 100 });
+    rows = rows.concat(next.results);
+  }
+  const breakdown = {
+    employees: { count: 0, amount: 0 },
+    staff: { count: 0, amount: 0 },
+    agents: { count: 0, amount: 0 },
+    contractors: { count: 0, amount: 0 },
+  };
+  for (const row of rows) {
+    const group = row.role === 'staff' ? breakdown.staff : breakdown.employees;
+    group.count += 1;
+    group.amount += Number(row.takeHome) || 0;
+  }
+  const settlements = await ContractorSettlement.find({ month, year, status: { $in: ['processed', 'paid'] } }).select('contractorId totalShare').lean();
+  breakdown.contractors.count = settlements.length;
+  breakdown.contractors.amount = Number(settlements.reduce((sum, settlement) => sum + (Number(settlement.totalShare) || 0), 0).toFixed(2));
+  for (const key of ['employees', 'staff', 'agents', 'contractors']) breakdown[key].amount = Number(breakdown[key].amount.toFixed(2));
+  return breakdown;
+};
+
+const periodResponse = (period) => ({
+  month: period.month,
+  year: period.year,
+  status: period.status,
+  finalizedAt: period.finalizedAt,
+  finalizedBy: period.finalizedBy,
+  totalPayout: period.totalPayout,
+  netPayout: period.totalPayout,
+  breakdown: period.breakdown || {
+    employees: { count: 0, amount: 0 }, staff: { count: 0, amount: 0 },
+    agents: { count: 0, amount: 0 }, contractors: { count: 0, amount: 0 },
+  },
+  abstractUrl: `/v1/payroll/periods/${period.year}/${period.month}/abstract`,
+});
+
+const getFinalizedPayrollPeriods = async (requestedYear, search = '') => {
+  const query = { status: 'finalized' };
+  if (requestedYear) query.year = Number(requestedYear);
+  const normalizedSearch = String(search || '').trim().toLowerCase();
+  const periods = await PayrollPeriod.find(query).sort({ year: -1, month: -1 }).lean();
+  const filtered = normalizedSearch
+    ? periods.filter((period) => new Date(Date.UTC(period.year, period.month - 1, 1)).toLocaleString('en-US', { month: 'long' }).toLowerCase().includes(normalizedSearch))
+    : periods;
+  return { data: filtered.map(periodResponse) };
+};
+
+const getPayrollAbstract = async (year, month) => {
+  const period = await PayrollPeriod.findOne({ year, month, status: 'finalized' }).lean();
+  if (!period) throw new ApiError(httpStatus.NOT_FOUND, 'Finalized payroll period not found');
+  return periodResponse(period);
+};
+
 const getPayrollPeriods = async (requestedYear) => {
   const now = new Date();
   const year = Number(requestedYear) || now.getUTCFullYear();
@@ -404,9 +462,13 @@ const finalizePayrollPeriod = async (year, month, actorId) => {
   if (requested > current) throw new ApiError(httpStatus.BAD_REQUEST, 'Future payroll months cannot be finalized');
   const existing = await PayrollPeriod.findOne({ year, month }).lean();
   if (existing) return existing;
-  const totals = await calculatePeriodTotal(month, year);
+  const breakdown = await calculateFinalizedBreakdown(month, year);
+  const totals = {
+    payout: Number(Object.values(breakdown).reduce((sum, group) => sum + group.amount, 0).toFixed(2)),
+    payrollCount: breakdown.employees.count + breakdown.staff.count,
+  };
   try {
-    return await PayrollPeriod.create({ month, year, status: 'finalized', totalPayout: totals.payout, payrollCount: totals.payrollCount, finalizedAt: new Date(), finalizedBy: actorId });
+    return await PayrollPeriod.create({ month, year, status: 'finalized', totalPayout: totals.payout, payrollCount: totals.payrollCount, breakdown, finalizedAt: new Date(), finalizedBy: actorId });
   } catch (error) {
     if (error.code === 11000) return PayrollPeriod.findOne({ year, month });
     throw error;
@@ -795,6 +857,8 @@ module.exports = {
   getPayrollList,
   getPayrollPeriods,
   finalizePayrollPeriod,
+  getFinalizedPayrollPeriods,
+  getPayrollAbstract,
   getEmployeePayroll,
   createPayroll,
   upsertPayroll,
