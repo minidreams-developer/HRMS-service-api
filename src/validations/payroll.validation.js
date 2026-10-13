@@ -21,6 +21,19 @@ const getPayrollList = {
   }),
 };
 
+const getPayrollPeriods = {
+  query: Joi.object().keys({
+    year: Joi.number().integer().min(2000).max(2100).optional(),
+  }),
+};
+
+const finalizePayrollPeriod = {
+  params: Joi.object().keys({
+    year: Joi.number().integer().min(2000).max(2100).required(),
+    month: Joi.number().integer().min(1).max(12).required(),
+  }),
+};
+
 const getEmployeePayroll = {
   params: Joi.object().keys({
     employeeId: Joi.string().custom(objectId).required(),
@@ -147,6 +160,8 @@ const getStoppedPayrolls = {
 
 module.exports = {
   getPayrollList,
+  getPayrollPeriods,
+  finalizePayrollPeriod,
   getEmployeePayroll,
   getMyPayroll,
   getMyPayrollById,

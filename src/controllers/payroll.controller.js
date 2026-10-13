@@ -18,6 +18,14 @@ const getPayrollList = catchAsync(async (req, res) => {
   res.send(result);
 });
 
+const getPayrollPeriods = catchAsync(async (req, res) => {
+  res.send(await payrollService.getPayrollPeriods(req.query.year));
+});
+
+const finalizePayrollPeriod = catchAsync(async (req, res) => {
+  res.send(await payrollService.finalizePayrollPeriod(Number(req.params.year), Number(req.params.month), req.user._id));
+});
+
 /**
  * GET /v1/payroll/:employeeId/preview
  * Detailed payroll breakdown for a single employee.
@@ -122,6 +130,8 @@ const getStoppedPayrolls = catchAsync(async (req, res) => {
 
 module.exports = {
   getPayrollList,
+  getPayrollPeriods,
+  finalizePayrollPeriod,
   getEmployeePayroll,
   getMyPayroll,
   getMyPayrollById,

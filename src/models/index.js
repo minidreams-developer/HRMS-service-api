@@ -29,6 +29,7 @@ module.exports.Adjustment = require('./adjustment.model');
 module.exports.Role = require('./roleAccess.model');
 module.exports.Organization = require('./organization.model');
 module.exports.Payroll = require('./payroll.model');
+module.exports.PayrollPeriod = require('./payrollPeriod.model');
 module.exports.Paysheet = require('./paysheet.model');
 module.exports.Roster = require('./roster.model');
 module.exports.Commission = require('./commission.model');

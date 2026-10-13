@@ -1,6 +1,6 @@
 const httpStatus = require('http-status');
 const mongoose = require('mongoose');
-const { User, Attendance, LeaveRequests, LeaveBalance, Overtime, Payroll } = require('../models');
+const { User, Attendance, LeaveRequests, LeaveBalance, Overtime, Payroll, PayrollPeriod } = require('../models');
 const ApiError = require('../utils/ApiError');
 const { calculateLeaveDays } = require('./leaveRequests.service');
 const { detectOverlappingOvertime } = require('./overtimeOverlap.service');
@@ -352,6 +352,65 @@ const getPayrollList = async (query, options) => {
     totalPfAmount,
     totalEsiAmount,
   };
+};
+
+const calculatePeriodTotal = async (month, year) => {
+  const first = await getPayrollList({ month, year }, { page: 1, limit: 100 });
+  let rows = first.results;
+  for (let page = 2; page <= first.totalPages; page += 1) {
+    const next = await getPayrollList({ month, year }, { page, limit: 100 });
+    rows = rows.concat(next.results);
+  }
+  return {
+    payout: Number(rows.reduce((sum, row) => sum + (Number(row.takeHome) || 0), 0).toFixed(2)),
+    payrollCount: first.totalResults,
+  };
+};
+
+const getPayrollPeriods = async (requestedYear) => {
+  const now = new Date();
+  const year = Number(requestedYear) || now.getUTCFullYear();
+  const currentMonth = now.getUTCFullYear() === year ? now.getUTCMonth() + 1 : null;
+  const [periods, payrollMonths] = await Promise.all([
+    PayrollPeriod.find({ year }).sort({ month: -1 }).lean(),
+    Payroll.distinct('month', { year }),
+  ]);
+  const months = new Set(payrollMonths.map(Number));
+  periods.forEach((period) => months.add(period.month));
+  if (currentMonth) months.add(currentMonth);
+
+  const finalizedByMonth = new Map(periods.map((period) => [period.month, period]));
+  const data = [];
+  for (const month of [...months].sort((a, b) => b - a)) {
+    const finalized = finalizedByMonth.get(month);
+    if (finalized) {
+      data.push({
+        month, year, status: 'finalized', payout: finalized.totalPayout, payoutType: 'final',
+        payrollCount: finalized.payrollCount, finalizedAt: finalized.finalizedAt, finalizedBy: finalized.finalizedBy,
+      });
+      continue;
+    }
+    const totals = await calculatePeriodTotal(month, year);
+    const live = month === currentMonth;
+    data.push({ month, year, status: live ? 'live' : 'pendingFinalization', payout: totals.payout, payoutType: live ? 'estimated' : 'draft', payrollCount: totals.payrollCount });
+  }
+  return { data };
+};
+
+const finalizePayrollPeriod = async (year, month, actorId) => {
+  const now = new Date();
+  const requested = new Date(Date.UTC(year, month - 1, 1));
+  const current = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  if (requested > current) throw new ApiError(httpStatus.BAD_REQUEST, 'Future payroll months cannot be finalized');
+  const existing = await PayrollPeriod.findOne({ year, month }).lean();
+  if (existing) return existing;
+  const totals = await calculatePeriodTotal(month, year);
+  try {
+    return await PayrollPeriod.create({ month, year, status: 'finalized', totalPayout: totals.payout, payrollCount: totals.payrollCount, finalizedAt: new Date(), finalizedBy: actorId });
+  } catch (error) {
+    if (error.code === 11000) return PayrollPeriod.findOne({ year, month });
+    throw error;
+  }
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -734,6 +793,8 @@ const getPayslip = async (payrollId, employeeId = null) => {
 module.exports = {
   computePayrollForEmployee,
   getPayrollList,
+  getPayrollPeriods,
+  finalizePayrollPeriod,
   getEmployeePayroll,
   createPayroll,
   upsertPayroll,
