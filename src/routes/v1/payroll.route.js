@@ -42,6 +42,10 @@ router
   .get(auth('manageAttendance'), validate(payrollValidation.getPayrollAbstract), payrollController.getPayrollAbstract);
 
 router
+  .route('/payslips/options')
+  .get(auth('manageAttendance'), validate(payrollValidation.getPayslipOptions), payrollController.getPayslipOptions);
+
+router
   .route('/stopped')
   .get(auth('manageAttendance'), validate(payrollValidation.getStoppedPayrolls), payrollController.getStoppedPayrolls);
 
@@ -56,6 +60,14 @@ router
 router
   .route('/:payrollId/payslip')
   .get(auth(), validate(payrollValidation.getPayslip), payrollController.getPayslip);
+
+router
+  .route('/:payrollId/payslip/csv')
+  .get(auth(), validate(payrollValidation.getPayslip), payrollController.getPayslipCsv);
+
+router
+  .route('/:payrollId/payslip/pdf')
+  .get(auth(), validate(payrollValidation.getPayslip), payrollController.getPayslipPdf);
 
 router
   .route('/:employeeId/preview')

@@ -34,6 +34,10 @@ const getPayrollAbstract = catchAsync(async (req, res) => {
   res.send(await payrollService.getPayrollAbstract(Number(req.params.year), Number(req.params.month)));
 });
 
+const getPayslipOptions = catchAsync(async (req, res) => {
+  res.send(await payrollService.getPayslipOptions(req.query));
+});
+
 /**
  * GET /v1/payroll/:employeeId/preview
  * Detailed payroll breakdown for a single employee.
@@ -64,6 +68,54 @@ const getPayslip = catchAsync(async (req, res) => {
   const self = selfServiceRoles.has(req.user.role);
   if (!self && !managementRoles.has(req.user.role)) throw new ApiError(httpStatus.FORBIDDEN, 'Forbidden');
   res.send(await payrollService.getPayslip(req.params.payrollId, self ? req.user._id : null));
+});
+
+const assertPayslipAccess = (user) => {
+  const self = selfServiceRoles.has(user.role);
+  if (!self && !managementRoles.has(user.role)) throw new ApiError(httpStatus.FORBIDDEN, 'Forbidden');
+  return self;
+};
+
+const csvEscape = (value) => `"${String(value ?? '').replace(/"/g, '""')}"`;
+const payslipRows = (payslip) => [
+  ['Field', 'Value'],
+  ['Payroll ID', payslip.payrollId], ['Month', `${payslip.month}/${payslip.year}`],
+  ['Employee ID', payslip.employee.employeeCode], ['Name', payslip.employee.name],
+  ['Role', payslip.employee.role], ['Department', payslip.employee.department],
+  ['Designation', payslip.employee.designation], ['Full Days', payslip.attendance.fullDays],
+  ['Half Days', payslip.attendance.halfDays], ['Paid Leaves', payslip.attendance.paidLeaves],
+  ['Unpaid Leaves', payslip.attendance.unpaidLeaves], ['Overtime Hours', payslip.attendance.overtimeHours],
+  ['Gross Wages', payslip.earnings.grossWages], ['Earned Wages', payslip.earnings.earnedWages],
+  ['Overtime Amount', payslip.earnings.overtimeAmount], ['Extras', payslip.earnings.extras],
+  ['Gross Earnings', payslip.earnings.grossEarnings], ['PF Amount', payslip.deductions.pfAmount],
+  ['ESI Amount', payslip.deductions.esiAmount], ['Total Deductions', payslip.deductions.totalDeductions],
+  ['Take Home', payslip.takeHome],
+];
+
+const getPayslipCsv = catchAsync(async (req, res) => {
+  const self = assertPayslipAccess(req.user);
+  const { payslip } = await payrollService.getPayslip(req.params.payrollId, self ? req.user._id : null);
+  const csv = payslipRows(payslip).map((row) => row.map(csvEscape).join(',')).join('\n');
+  res.type('text/csv').attachment(`payslip-${req.params.payrollId}.csv`).send(csv);
+});
+
+const getPayslipPdf = catchAsync(async (req, res) => {
+  const self = assertPayslipAccess(req.user);
+  const { payslip } = await payrollService.getPayslip(req.params.payrollId, self ? req.user._id : null);
+  const lines = payslipRows(payslip).map(([key, value]) => `${key}: ${value ?? ''}`);
+  const escapePdf = (value) => String(value).replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
+  const content = `BT /F1 10 Tf 50 760 Td ${lines.map((line, i) => `${i ? '0 -16 Td ' : ''}(${escapePdf(line)}) Tj`).join(' ')} ET`;
+  const objects = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>',
+    `<< /Length ${Buffer.byteLength(content)} >>\nstream\n${content}\nendstream`,
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+  ];
+  let pdf = '%PDF-1.4\n'; const offsets = [0];
+  objects.forEach((object, index) => { offsets[index + 1] = Buffer.byteLength(pdf); pdf += `${index + 1} 0 obj\n${object}\nendobj\n`; });
+  const xref = Buffer.byteLength(pdf); pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets.slice(1).map((offset) => `${String(offset).padStart(10, '0')} 00000 n `).join('\n')}\ntrailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+  res.type('application/pdf').attachment(`payslip-${req.params.payrollId}.pdf`).send(Buffer.from(pdf));
 });
 
 /**
@@ -142,10 +194,13 @@ module.exports = {
   finalizePayrollPeriod,
   getFinalizedPayrollPeriods,
   getPayrollAbstract,
+  getPayslipOptions,
   getEmployeePayroll,
   getMyPayroll,
   getMyPayrollById,
   getPayslip,
+  getPayslipCsv,
+  getPayslipPdf,
   createPayroll,
   upsertPayroll,
   processPayroll,

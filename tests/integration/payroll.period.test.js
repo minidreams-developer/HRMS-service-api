@@ -50,6 +50,10 @@ describe('PAYHUB-PERIOD-01 payroll periods', () => {
     await Attendance.create({ employeeId: employee._id, date: '2026-09-10', attendanceDay: '2026-09-10', attendanceCategory: 'fullDay', timingStatus: 'onTime' });
     const first = await request(app).post(`/v1/payroll/periods/${year}/${month}/finalize`).set({ Authorization: `Bearer ${token(admin)}` }).expect(httpStatus.OK);
     expect(first.body).toMatchObject({ month, year, status: 'finalized' });
+    const persisted = await Payroll.find({ month, year, employeeId: employee._id }).lean();
+    expect(persisted).toHaveLength(1);
+    expect(persisted[0]).toMatchObject({ status: 'processed' });
+    expect(persisted[0].snapshot).toBeTruthy();
     const payout = first.body.totalPayout;
     expect(payout).toBeGreaterThan(0);
 
@@ -79,5 +83,21 @@ describe('PAYHUB-PERIOD-01 payroll periods', () => {
     await PayrollPeriod.create({ month: 1, year: 2025, totalPayout: 500, payrollCount: 1, finalizedAt: new Date(), finalizedBy: admin._id });
     const response = await request(app).get('/v1/payroll/periods?year=2026').set({ Authorization: `Bearer ${token(admin)}` }).expect(httpStatus.OK);
     expect(response.body.data.every((period) => period.year === 2026)).toBe(true);
+  });
+
+  test('finalization stores populated and missing branches as scalar snapshot values', async () => {
+    await User.updateOne({ _id: employee._id }, {
+      'workInformation.branch': { _id: id(), branchName: 'Chennai Branch' },
+    });
+    const populated = await payrollService.finalizePayrollPeriod(2026, 9, admin._id);
+    expect(populated.status).toBe('finalized');
+    const persisted = await Payroll.findOne({ employeeId: employee._id, month: 9, year: 2026 }).lean();
+    expect(persisted.snapshot.employee.branch).toBe('Chennai Branch');
+
+    await User.updateOne({ _id: employee._id }, { $unset: { 'workInformation.branch': 1 } });
+    const next = await payrollService.finalizePayrollPeriod(2026, 10, admin._id);
+    expect(next.status).toBe('finalized');
+    const missing = await Payroll.findOne({ employeeId: employee._id, month: 10, year: 2026 }).lean();
+    expect(missing.snapshot.employee.branch).toBeNull();
   });
 });

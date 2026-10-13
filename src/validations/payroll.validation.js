@@ -48,6 +48,15 @@ const getPayrollAbstract = {
   }),
 };
 
+const getPayslipOptions = {
+  query: Joi.object().keys({
+    year: Joi.number().integer().min(2000).max(2100).required(),
+    month: Joi.number().integer().min(1).max(12).required(),
+    category: Joi.string().valid('all', 'employee', 'staff').default('all'),
+    search: Joi.string().allow('').optional(),
+  }),
+};
+
 const getEmployeePayroll = {
   params: Joi.object().keys({
     employeeId: Joi.string().custom(objectId).required(),
@@ -178,6 +187,7 @@ module.exports = {
   finalizePayrollPeriod,
   getFinalizedPayrollPeriods,
   getPayrollAbstract,
+  getPayslipOptions,
   getEmployeePayroll,
   getMyPayroll,
   getMyPayrollById,

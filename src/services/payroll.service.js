@@ -1,6 +1,6 @@
 const httpStatus = require('http-status');
 const mongoose = require('mongoose');
-const { User, Attendance, LeaveRequests, LeaveBalance, Overtime, Payroll, PayrollPeriod, ContractorSettlement } = require('../models');
+const { User, Attendance, LeaveRequests, LeaveBalance, Overtime, Payroll, PayrollPeriod, ContractorSettlement, Department } = require('../models');
 const ApiError = require('../utils/ApiError');
 const { calculateLeaveDays } = require('./leaveRequests.service');
 const { detectOverlappingOvertime } = require('./overtimeOverlap.service');
@@ -11,6 +11,16 @@ const WORKING_DAYS_PER_MONTH = 26;
 // Overtime rate multiplier (1.5x of daily rate per hour, assuming 8h day)
 const OVERTIME_HOURLY_MULTIPLIER = 1.5;
 const WORK_HOURS_PER_DAY = 8;
+const snapshotText = (value, fields = []) => {
+  if (value === null || value === undefined || value === '') return value ?? null;
+  if (typeof value === 'object') {
+    for (const field of fields) {
+      if (value[field] !== undefined && value[field] !== null && value[field] !== '') return String(value[field]);
+    }
+    if (value._id !== undefined) return String(value._id);
+  }
+  return String(value);
+};
 const allowedTransitions = {
   draft: ['processed', 'stopped'],
   processed: ['processed', 'paid', 'stopped'],
@@ -369,22 +379,19 @@ const calculatePeriodTotal = async (month, year) => {
 };
 
 const calculateFinalizedBreakdown = async (month, year) => {
-  const first = await getPayrollList({ month, year }, { page: 1, limit: 100 });
-  let rows = first.results;
-  for (let page = 2; page <= first.totalPages; page += 1) {
-    const next = await getPayrollList({ month, year }, { page, limit: 100 });
-    rows = rows.concat(next.results);
-  }
   const breakdown = {
     employees: { count: 0, amount: 0 },
     staff: { count: 0, amount: 0 },
     agents: { count: 0, amount: 0 },
     contractors: { count: 0, amount: 0 },
   };
-  for (const row of rows) {
-    const group = row.role === 'staff' ? breakdown.staff : breakdown.employees;
+  const payrolls = await Payroll.find({ month, year, status: { $in: ['processed', 'paid'] } })
+    .select('employeeId snapshot.employee.role snapshot.takeHome')
+    .lean();
+  for (const payroll of payrolls) {
+    const group = payroll.snapshot?.employee?.role === 'staff' ? breakdown.staff : breakdown.employees;
     group.count += 1;
-    group.amount += Number(row.takeHome) || 0;
+    group.amount += Number(payroll.snapshot?.takeHome) || 0;
   }
   const settlements = await ContractorSettlement.find({ month, year, status: { $in: ['processed', 'paid'] } }).select('contractorId totalShare').lean();
   breakdown.contractors.count = settlements.length;
@@ -462,6 +469,18 @@ const finalizePayrollPeriod = async (year, month, actorId) => {
   if (requested > current) throw new ApiError(httpStatus.BAD_REQUEST, 'Future payroll months cannot be finalized');
   const existing = await PayrollPeriod.findOne({ year, month }).lean();
   if (existing) return existing;
+
+  // Finalization must materialize the same individual frozen payroll records
+  // used by payslips before creating the month aggregate.
+  const eligibleUsers = await User.find({ role: { $in: ['employee', 'staff'] }, isActive: 'Active', isDeleted: { $ne: true } })
+    .select('_id')
+    .lean();
+  for (const user of eligibleUsers) {
+    const existingPayroll = await Payroll.findOne({ employeeId: user._id, month, year }).select('status').lean();
+    if (existingPayroll?.status === 'paid') continue;
+    await processPayroll(user._id, month, year, actorId);
+  }
+
   const breakdown = await calculateFinalizedBreakdown(month, year);
   const totals = {
     payout: Number(Object.values(breakdown).reduce((sum, group) => sum + group.amount, 0).toFixed(2)),
@@ -603,8 +622,8 @@ const processPayroll = async (employeeId, month, year, actorId) => {
             name: emp.name,
             role: emp.role,
             designation: emp.workInformation?.designation,
-            department: emp.workInformation?.department?.name || emp.workInformation?.department,
-            branch: emp.workInformation?.branch?.name || emp.workInformation?.branch,
+            department: snapshotText(emp.workInformation?.department, ['departmentName', 'name']),
+            branch: snapshotText(emp.workInformation?.branch, ['branchName', 'name']),
           },
           fullDays: computed.fullDays,
           halfDays: computed.halfDays,
@@ -833,6 +852,11 @@ const getPayslip = async (payrollId, employeeId = null) => {
   }
   const snapshot = payroll.snapshot || {};
   const employee = snapshot.employee || {};
+  let department = employee.department || null;
+  if (department && mongoose.Types.ObjectId.isValid(String(department))) {
+    const departmentRecord = await Department.findById(department).select('departmentName').lean();
+    department = departmentRecord?.departmentName || department;
+  }
   const pfAmount = payroll.pfAmount || 0;
   const esiAmount = payroll.esiAmount || 0;
   return {
@@ -843,13 +867,35 @@ const getPayslip = async (payrollId, employeeId = null) => {
       status: payroll.status,
       processedAt: payroll.processedAt || null,
       paidAt: payroll.paidAt || null,
-      employee: { id: employee.id || payroll.employeeId, employeeCode: employee.employeeCode, name: employee.name, role: employee.role, designation: employee.designation, department: employee.department, branch: employee.branch },
+      employee: { id: employee.id || payroll.employeeId, employeeCode: employee.employeeCode, name: employee.name, role: employee.role, designation: employee.designation, department, branch: employee.branch },
       attendance: { fullDays: snapshot.fullDays || 0, halfDays: snapshot.halfDays || 0, absentDays: snapshot.absentDays || 0, paidLeaves: snapshot.paidLeaves || 0, unpaidLeaves: snapshot.unpaidLeaves || 0, overtimeHours: snapshot.overtimeHours || 0 },
       earnings: { grossWages: snapshot.grossWages || 0, earnedWages: snapshot.earnedWages || 0, overtimeAmount: snapshot.overtimeAmount || 0, extras: payroll.extras || 0, otherWages: payroll.otherWages || 0, grossEarnings: snapshot.grossEarnings || 0 },
       deductions: { deductions: payroll.deductions || 0, penalties: payroll.penalties || 0, loanAndAdvance: payroll.loanAndAdvance || 0, otherDeductions: payroll.otherDeductions || 0, pfAmount, esiAmount, totalDeductions: Math.max(0, (snapshot.grossEarnings || 0) - (snapshot.takeHome || 0)) },
       takeHome: snapshot.takeHome || 0,
     },
   };
+};
+
+const getPayslipOptions = async ({ year, month, category = 'all', search = '' }) => {
+  const filter = { year: Number(year), month: Number(month), status: { $in: ['processed', 'paid'] } };
+  const rows = await Payroll.find(filter).select('_id employeeId snapshot.employee').lean();
+  const normalizedSearch = String(search || '').trim().toLowerCase();
+  const data = rows
+    .map((row) => {
+      const employee = row.snapshot?.employee || {};
+      return {
+        payrollId: row._id,
+        employeeId: employee.employeeCode || row.employeeId,
+        name: employee.name || null,
+        role: employee.role || null,
+      };
+    })
+    .filter((row) => (category === 'all' || row.role === category)
+      && (!normalizedSearch
+        || String(row.name || '').toLowerCase().includes(normalizedSearch)
+        || String(row.employeeId || '').toLowerCase().includes(normalizedSearch)))
+    .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+  return { data };
 };
 
 module.exports = {
@@ -870,6 +916,7 @@ module.exports = {
   getPayrollHistoryForUser,
   getPayrollForUser,
   getPayslip,
+  getPayslipOptions,
   updatePayrollStatus,
   assertStatusTransition,
 };
