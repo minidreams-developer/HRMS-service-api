@@ -1,7 +1,7 @@
 const httpStatus = require('http-status');
 const mongoose = require('mongoose');
 const Adjustment = require('../models/adjustment.model');
-const { User, Payroll, PayrollPeriod } = require('../models');
+const { User, Payroll, PayrollPeriod, EmiInstallment } = require('../models');
 const ApiError = require('../utils/ApiError');
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -12,6 +12,17 @@ const populateAdjustment = (query) =>
     .populate('teamId', 'teamName teamCode teamLead')
     .populate('departmentId', 'departmentName')
     .populate('createdBy', 'name employeeId');
+
+const monthIndex = (month, year) => (year * 12) + month - 1;
+const monthsBetweenInclusive = (from, to) => monthIndex(to.month, to.year) - monthIndex(from.month, from.year) + 1;
+const buildInstallments = (amount, totalMonths, from) => {
+  const base = Math.floor((Number(amount) / totalMonths) * 100) / 100;
+  const finalAmount = Number((Number(amount) - (base * (totalMonths - 1))).toFixed(2));
+  return Array.from({ length: totalMonths }, (_, index) => {
+    const absolute = monthIndex(from.month, from.year) + index;
+    return { month: (absolute % 12) + 1, year: Math.floor(absolute / 12), installmentNumber: index + 1, installmentAmount: index === totalMonths - 1 ? finalAmount : base };
+  });
+};
 
 // ─── Quick Stats ──────────────────────────────────────────────────────────────
 
@@ -75,9 +86,17 @@ const createAdjustment = async (body, createdById) => {
     remarks: body.remarks,
   };
 
-  // EMI extra fields
-  if (body.component === 'emi' && body.emiDetails) {
-    data.emiDetails = body.emiDetails;
+  if (body.component === 'emi') {
+    const from = body.emiDetails?.affectFrom;
+    const to = body.emiDetails?.affectTo;
+    const totalMonths = Number(body.emiDetails?.totalMonths);
+    if (!from || !to || !Number.isInteger(totalMonths) || totalMonths < 1) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'EMI affectFrom, affectTo, and totalMonths are required');
+    }
+    if (monthsBetweenInclusive(from, to) !== totalMonths) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'EMI totalMonths must match the inclusive affectFrom/affectTo range');
+    }
+    data.emiDetails = { ...body.emiDetails, perMonthDeduction: Number((Number(body.amount) / totalMonths).toFixed(2)) };
   }
 
   if (body.forWhom === 'individual') {
@@ -99,6 +118,9 @@ const createAdjustment = async (body, createdById) => {
 
     data.employeeId = emp._id;
     const adj = await Adjustment.create(data);
+    if (body.component === 'emi') {
+      await EmiInstallment.insertMany(buildInstallments(body.amount, body.emiDetails.totalMonths, body.emiDetails.affectFrom).map((item) => ({ ...item, parentAdjustmentId: adj._id, employeeId: emp._id })));
+    }
     return populateAdjustment(Adjustment.findById(adj._id));
   }
 
@@ -122,6 +144,7 @@ const createAdjustment = async (body, createdById) => {
     const members = team.teamEmployees || [];
 
     if (!members.length) {
+      if (body.component === 'emi') throw new ApiError(httpStatus.BAD_REQUEST, 'Cannot create team EMI without team members');
       // No members yet — create a single team-level record (no employeeId)
       const adj = await Adjustment.create({
         ...data,
@@ -140,6 +163,10 @@ const createAdjustment = async (body, createdById) => {
     }));
 
     const created = await Adjustment.insertMany(records);
+    if (body.component === 'emi') {
+      const installments = created.flatMap((record) => buildInstallments(body.amount, body.emiDetails.totalMonths, body.emiDetails.affectFrom).map((item) => ({ ...item, parentAdjustmentId: record._id, employeeId: record.employeeId })));
+      await EmiInstallment.insertMany(installments);
+    }
     return created;
   }
 
@@ -228,6 +255,13 @@ const updateAdjustmentStatus = async (id, status, actorId = null) => {
     adj.status = status;
   }
 
+  if (status === 'canceled' && adj.component === 'emi') {
+    await EmiInstallment.updateMany(
+      { parentAdjustmentId: adj._id, status: 'pending' },
+      { $set: { status: 'cancelled', cancelledAt: new Date() } }
+    );
+  }
+
   await adj.save();
   return populateAdjustment(Adjustment.findById(adj._id));
 };
@@ -239,6 +273,13 @@ const updateAdjustmentStatus = async (id, status, actorId = null) => {
  */
 const applyAdjustmentToPayroll = async (adj) => {
   if (!adj.employeeId) return;
+  if (adj.component === 'emi') {
+    const installment = await EmiInstallment.findOne({ parentAdjustmentId: adj._id, month: adj.payrollMonth, year: adj.payrollYear, status: 'pending' });
+    if (!installment) return;
+    const appliedInstallment = await applyEmiInstallment(installment);
+    adj.payrollId = appliedInstallment?.payrollId || null;
+    return;
+  }
   if (await PayrollPeriod.exists({ month: adj.payrollMonth, year: adj.payrollYear, status: 'finalized' })) {
     throw new ApiError(httpStatus.CONFLICT, 'Cannot apply an adjustment to a finalized payroll period');
   }
@@ -253,6 +294,43 @@ const applyAdjustmentToPayroll = async (adj) => {
     { $inc: { [field]: adj.amount } }, { upsert: true, new: true }
   );
   adj.payrollId = updated._id;
+};
+
+const applyEmiInstallment = async (installment, now = new Date()) => {
+  if (await PayrollPeriod.exists({ month: installment.month, year: installment.year, status: 'finalized' })) {
+    throw new ApiError(httpStatus.CONFLICT, 'Cannot apply an EMI installment to a finalized payroll period');
+  }
+  const payroll = await Payroll.findOne({ employeeId: installment.employeeId, month: installment.month, year: installment.year });
+  if (payroll && ['paid', 'stopped'].includes(payroll.status)) {
+    throw new ApiError(httpStatus.CONFLICT, `Cannot apply EMI installment to ${payroll.status} payroll`);
+  }
+  const updatedPayroll = await Payroll.findOneAndUpdate(
+    { employeeId: installment.employeeId, month: installment.month, year: installment.year },
+    { $inc: { loanAndAdvance: installment.installmentAmount } }, { upsert: true, new: true }
+  );
+  return EmiInstallment.findOneAndUpdate(
+    { _id: installment._id, status: 'pending' },
+    { $set: { status: 'applied', payrollId: updatedPayroll._id, appliedAt: now } }, { new: true }
+  );
+};
+
+const processDueEmiInstallments = async ({ month, year }) => {
+  const due = await EmiInstallment.find({ month, year, status: 'pending' }).populate('parentAdjustmentId').lean();
+  let applied = 0;
+  for (const installment of due) {
+    const parent = installment.parentAdjustmentId;
+    if (!parent || !['approved', 'applied'].includes(parent.status)) continue;
+    if (parent.status === 'approved') continue;
+    if (await applyEmiInstallment(installment)) applied += 1;
+  }
+  return { matched: due.length, applied };
+};
+
+const getEmiSchedule = async (id) => {
+  const adjustment = await Adjustment.findById(id).lean();
+  if (!adjustment) return null;
+  const installments = await EmiInstallment.find({ parentAdjustmentId: id }).sort({ installmentNumber: 1 }).lean();
+  return { parentAdjustmentId: adjustment._id, amount: adjustment.amount, totalMonths: adjustment.emiDetails?.totalMonths || 0, perMonthDeduction: adjustment.emiDetails?.perMonthDeduction || null, installments };
 };
 
 // ─── Update Adjustment ────────────────────────────────────────────────────────
@@ -311,4 +389,6 @@ module.exports = {
   updateAdjustmentStatus,
   updateAdjustmentById,
   deleteAdjustmentById,
+  getEmiSchedule,
+  processDueEmiInstallments,
 };

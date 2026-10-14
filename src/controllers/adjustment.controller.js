@@ -62,6 +62,12 @@ const getAdjustment = catchAsync(async (req, res) => {
   res.send(adjustment);
 });
 
+const getEmiSchedule = catchAsync(async (req, res) => {
+  const schedule = await adjustmentService.getEmiSchedule(req.params.adjustmentId);
+  if (!schedule) throw new ApiError(httpStatus.NOT_FOUND, 'Adjustment not found');
+  res.send(schedule);
+});
+
 /**
  * PATCH /v1/adjustments/:adjustmentId
  * Update editable fields (only allowed when status is draft or pending).
@@ -100,6 +106,7 @@ module.exports = {
   getAdjustments,
   getPendingAdjustments,
   getAdjustment,
+  getEmiSchedule,
   updateAdjustment,
   updateAdjustmentStatus,
   deleteAdjustment,

@@ -37,6 +37,10 @@ router
   .patch(auth('manageAttendance'), validate(validation.status), adjustmentController.updateAdjustmentStatus);
 
 router
+  .route('/:adjustmentId/emi-schedule')
+  .get(auth('manageAttendance'), validate(validation.id), adjustmentController.getEmiSchedule);
+
+router
   .route('/:adjustmentId')
   .get(auth('manageAttendance'), validate(validation.id), adjustmentController.getAdjustment)
   .patch(auth('manageAttendance'), validate(validation.update), adjustmentController.updateAdjustment)

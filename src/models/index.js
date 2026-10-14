@@ -26,6 +26,7 @@ module.exports.LogWork = require('./logWork.model');
 module.exports.ContractorWorkerAssignment = require('./contractorWorkerAssignment.model');
 module.exports.ContractorSettlement = require('./contractorSettlement.model');
 module.exports.Adjustment = require('./adjustment.model');
+module.exports.EmiInstallment = require('./emiInstallment.model');
 module.exports.Role = require('./roleAccess.model');
 module.exports.Organization = require('./organization.model');
 module.exports.Payroll = require('./payroll.model');

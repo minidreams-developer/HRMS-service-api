@@ -2,6 +2,12 @@ const Joi = require('joi');
 const { objectId } = require('./custom.validation');
 
 const components = ['bonus', 'incentive', 'advance', 'penalty', 'emi', 'other'];
+const emiDetails = Joi.object({
+  affectFrom: Joi.object({ month: Joi.number().integer().min(1).max(12).required(), year: Joi.number().integer().min(2000).max(2100).required() }).required(),
+  affectTo: Joi.object({ month: Joi.number().integer().min(1).max(12).required(), year: Joi.number().integer().min(2000).max(2100).required() }).required(),
+  totalMonths: Joi.number().integer().min(1).required(),
+  perMonthDeduction: Joi.number().greater(0).required(),
+}).unknown(false);
 const baseQuery = {
   month: Joi.number().integer().min(1).max(12), year: Joi.number().integer().min(2000).max(2100),
   status: Joi.string().valid('draft', 'pending', 'approved', 'rejected', 'canceled', 'applied'),
@@ -15,7 +21,15 @@ const create = { body: Joi.object({
   type: Joi.string().valid('addition', 'deduction').required(), component: Joi.string().valid(...components).required(),
   date: Joi.date().required(), payrollMonth: Joi.number().integer().min(1).max(12).required(),
   payrollYear: Joi.number().integer().min(2000).max(2100).required(), amount: Joi.number().greater(0).required(),
-  appliedToPayroll: Joi.boolean(), emiDetails: Joi.object(), remarks: Joi.string().allow(''), departmentId: Joi.string().custom(objectId),
+  appliedToPayroll: Joi.boolean(), emiDetails: Joi.when('component', { is: 'emi', then: emiDetails.required(), otherwise: Joi.forbidden() }), remarks: Joi.string().allow(''), departmentId: Joi.string().custom(objectId),
+}).custom((value, helpers) => {
+  const additionOnly = ['bonus', 'incentive', 'other'];
+  const deductionOnly = ['advance', 'emi', 'penalty'];
+  if ((value.type === 'addition' && deductionOnly.includes(value.component))
+    || (value.type === 'deduction' && additionOnly.slice(0, 2).includes(value.component))) {
+    return helpers.message('"component" is not valid for the selected "type"');
+  }
+  return value;
 }).unknown(false) };
 const list = { query: Joi.object(baseQuery) };
 const id = { params: Joi.object({ adjustmentId: Joi.string().custom(objectId).required() }) };

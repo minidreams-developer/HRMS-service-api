@@ -1,6 +1,6 @@
 const cron = require('node-cron');
 const logger = require('../config/logger');
-const { announcementService, payrollService } = require('../services');
+const { announcementService, payrollService, adjustmentService } = require('../services');
 
 /**
  * Runs every minute and publishes any scheduled announcements
@@ -37,8 +37,19 @@ const startAnnouncementScheduler = () => {
     }
   });
 
+  cron.schedule('5 0 * * *', async () => {
+    try {
+      const now = new Date();
+      const result = await adjustmentService.processDueEmiInstallments({ month: now.getMonth() + 1, year: now.getFullYear() });
+      if (result.applied > 0) logger.info(`[PayrollScheduler] Applied ${result.applied} EMI installment(s)`);
+    } catch (err) {
+      logger.error(`[PayrollScheduler] Error processing EMI installments: ${err.message}`);
+    }
+  });
+
   logger.info('[AnnouncementScheduler] Started — checking every minute for due announcements');
   logger.info('[PayrollScheduler] Started — checking every 15 minutes for due payroll resumes');
+  logger.info('[PayrollScheduler] Started — processing EMI installments daily');
 };
 
 module.exports = { startAnnouncementScheduler };
