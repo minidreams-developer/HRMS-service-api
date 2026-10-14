@@ -201,6 +201,18 @@ const getStoppedPayrolls = catchAsync(async (req, res) => {
   res.send(result);
 });
 
+const getStopPayrollQuickStats = catchAsync(async (req, res) => {
+  res.send(await payrollService.getStopPayrollQuickStats(req.query));
+});
+
+const getStopPayrollList = catchAsync(async (req, res) => {
+  res.send(await payrollService.getStopPayrollList(req.query, req.query));
+});
+
+const getStopPayrollDashboard = catchAsync(async (req, res) => {
+  res.send(await payrollService.getStopPayrollDashboard(req.query, req.query));
+});
+
 module.exports = {
   getPayrollList,
   getPayrollPeriods,
@@ -223,4 +235,7 @@ module.exports = {
   stopPayroll,
   resumePayroll,
   getStoppedPayrolls,
+  getStopPayrollQuickStats,
+  getStopPayrollList,
+  getStopPayrollDashboard,
 };

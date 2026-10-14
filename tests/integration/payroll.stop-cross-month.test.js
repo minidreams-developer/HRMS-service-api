@@ -1,7 +1,13 @@
 const mongoose = require('mongoose');
+const moment = require('moment');
+const request = require('supertest');
+const httpStatus = require('http-status');
+const app = require('../../src/app');
 const { User, Payroll } = require('../../src/models');
 const setupTestDB = require('../utils/setupTestDB');
 const payrollService = require('../../src/services/payroll.service');
+const tokenService = require('../../src/services/token.service');
+const { tokenTypes } = require('../../src/config/tokens');
 
 setupTestDB();
 const id = () => new mongoose.Types.ObjectId();
@@ -14,6 +20,9 @@ describe('PAYHUB-STOP-PAYROLL-CROSSMONTH-01', () => {
     ]);
     const september = await payrollService.processPayroll(employee._id, 9, 2026, admin._id);
     await payrollService.stopPayroll(employee._id, { month: 9, year: 2026, stopType: 'hold', reason: 'Review', effectiveFrom: '2026-09-20', impactMonth: 'September 2026' });
+    const authToken = tokenService.generateToken(admin._id, moment().add(30, 'minutes'), tokenTypes.ACCESS);
+    const stats = await request(app).get('/v1/payroll/stop/quick-stats?month=9&year=2026').set({ Authorization: `Bearer ${authToken}` }).expect(httpStatus.OK);
+    expect(stats.body).toMatchObject({ stoppedPayrolls: 1, releasedPayrolls: 0 });
     const october = await payrollService.processPayroll(employee._id, 10, 2026, admin._id);
     expect(String(september.payrollId)).not.toBe(String(october.payrollId));
 

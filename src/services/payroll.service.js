@@ -917,6 +917,52 @@ const getStoppedPayrolls = async (query, options) => {
   };
 };
 
+const getStopPayrollList = async (query = {}, options = {}) => {
+  const page = Math.max(Number(options.page) || 1, 1); const limit = Math.min(Math.max(Number(options.limit) || 10, 1), 100);
+  const filter = { status: query.status || { $in: ['stopped', 'resumed', 'processed', 'paid'] } };
+  if (query.month) filter.month = Number(query.month); if (query.year) filter.year = Number(query.year);
+  const payrolls = await Payroll.find(filter).populate('employeeId', 'name employeeId role profilePic workInformation').sort({ updatedAt: -1 }).lean();
+  const search = String(query.search || '').toLowerCase();
+  const rows = payrolls.filter((payroll) => {
+    const employee = payroll.employeeId || {}; const snapshot = payroll.snapshot?.employee || {};
+    if (!['employee', 'staff'].includes(employee.role || snapshot.role)) return false;
+    if (query.role && (employee.role || snapshot.role) !== query.role) return false;
+    if (query.departmentId) {
+      const department = snapshot.department || employee.workInformation?.department;
+      if (String(department) !== String(query.departmentId)) return false;
+    }
+    return !search || `${employee.name || snapshot.name || ''} ${employee.employeeId || snapshot.employeeCode || ''}`.toLowerCase().includes(search);
+  }).map((payroll) => {
+    const employee = payroll.employeeId || {}; const snapshot = payroll.snapshot?.employee || {}; const released = ['resumed', 'processed', 'paid'].includes(payroll.status) && payroll.stopDetails?.resumedAt;
+    return {
+      payrollId: payroll._id, employeeId: employee._id || payroll.employeeId, employeeCode: employee.employeeId || snapshot.employeeCode,
+      name: employee.name || snapshot.name, profilePic: employee.profilePic || null, role: employee.role || snapshot.role,
+      department: snapshot.department || employee.workInformation?.department || null, shift: null,
+      reason: payroll.stopDetails?.reason || null, stopType: payroll.stopDetails?.stopType || null,
+      from: payroll.stopDetails?.effectiveFrom || payroll.stopDetails?.stoppedAt || null,
+      till: released ? payroll.stopDetails.resumedAt : (payroll.stopDetails?.resumeOn || null),
+      amount: Number(payroll.snapshot?.takeHome ?? payroll.totalPayableAmount ?? 0), status: payroll.status,
+      stoppedAt: payroll.stopDetails?.stoppedAt || null, resumedAt: payroll.stopDetails?.resumedAt || null, resumeOn: payroll.stopDetails?.resumeOn || null,
+    };
+  });
+  return { results: rows.slice((page - 1) * limit, page * limit), page, limit, totalResults: rows.length, totalPages: Math.ceil(rows.length / limit) };
+};
+
+const getStopPayrollQuickStats = async (query = {}) => {
+  const filter = {}; if (query.month) filter.month = Number(query.month); if (query.year) filter.year = Number(query.year);
+  const rows = await Payroll.find(filter).select('status stopDetails snapshot.takeHome totalPayableAmount employeeId').populate('employeeId', 'role').lean();
+  const relevant = rows.filter((row) => ['employee', 'staff'].includes(row.employeeId?.role));
+  const stopped = relevant.filter((row) => row.status === 'stopped');
+  const released = relevant.filter((row) => ['resumed', 'processed', 'paid'].includes(row.status) && row.stopDetails?.resumedAt);
+  const amount = (row) => Number(row.snapshot?.takeHome ?? row.totalPayableAmount ?? 0);
+  return { stoppedPayrolls: stopped.length, releasedPayrolls: released.length, pendingAmount: stopped.reduce((sum, row) => sum + amount(row), 0), releasedAmount: released.reduce((sum, row) => sum + amount(row), 0) };
+};
+
+const getStopPayrollDashboard = async (query = {}, options = {}) => ({
+  quickStats: await getStopPayrollQuickStats(query),
+  list: await getStopPayrollList(query, options),
+});
+
 const getPayrollHistoryForUser = async (employeeId, query = {}, options = {}) => {
   const limit = Math.min(parseInt(options.limit, 10) || 10, 100);
   const page = Math.max(parseInt(options.page, 10) || 1, 1);
@@ -1013,6 +1059,9 @@ module.exports = {
   stopPayroll,
   resumePayroll,
   getStoppedPayrolls,
+  getStopPayrollList,
+  getStopPayrollQuickStats,
+  getStopPayrollDashboard,
   getPayrollHistoryForUser,
   getPayrollForUser,
   getPayslip,
