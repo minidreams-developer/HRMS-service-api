@@ -18,16 +18,16 @@ const router = express.Router();
 
 router
   .route('/tree')
-  .get(auth('manageAttendance'), validate(hierarchyValidation.getHierarchyTree), hierarchyController.getHierarchyTree);
+  .get(auth({ group: 'peopleHub', module: 'hierarchy' }), validate(hierarchyValidation.getHierarchyTree), hierarchyController.getHierarchyTree);
 
 router
   .route('/roles')
-  .get(auth('manageAttendance'), validate(hierarchyValidation.getHierarchyByRole), hierarchyController.getHierarchyByRole);
+  .get(auth({ group: 'peopleHub', module: 'hierarchy' }), validate(hierarchyValidation.getHierarchyByRole), hierarchyController.getHierarchyByRole);
 
 router
   .route('/chain/:userId')
-  .get(auth('manageAttendance'), validate(hierarchyValidation.getReportingChain), hierarchyController.getReportingChain);
+  .get(auth({ group: 'peopleHub', module: 'hierarchy' }), validate(hierarchyValidation.getReportingChain), hierarchyController.getReportingChain);
 
-router.route('/reports/:managerId').get(auth('manageAttendance'), validate(hierarchyValidation.getDirectReports), hierarchyController.getDirectReports);
+router.route('/reports/:managerId').get(auth({ group: 'peopleHub', module: 'hierarchy' }), validate(hierarchyValidation.getDirectReports), hierarchyController.getDirectReports);
 
 module.exports = router;

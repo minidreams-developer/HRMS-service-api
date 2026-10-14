@@ -8,15 +8,15 @@ const router = express.Router();
 
 router
   .route('/')
-  .post(auth(), validate(shiftValidation.createShift), shiftController.createShift)
-  .get(auth(), validate(shiftValidation.getShifts), shiftController.getShifts);
+  .post(auth({ group: 'timeHub', module: 'shiftManagement' }), validate(shiftValidation.createShift), shiftController.createShift)
+  .get(auth({ group: 'timeHub', module: 'shiftManagement' }), validate(shiftValidation.getShifts), shiftController.getShifts);
 
-router.route('/generate-id').get(auth(), shiftController.generateShiftId);
+router.route('/generate-id').get(auth({ group: 'timeHub', module: 'shiftManagement' }), shiftController.generateShiftId);
 
 router
   .route('/:shiftId')
-  .get(auth(), validate(shiftValidation.getShift), shiftController.getShift)
-  .patch(auth(), validate(shiftValidation.updateShift), shiftController.updateShift)
-  .delete(auth(), validate(shiftValidation.deleteShift), shiftController.deleteShift);
+  .get(auth({ group: 'timeHub', module: 'shiftManagement' }), validate(shiftValidation.getShift), shiftController.getShift)
+  .patch(auth({ group: 'timeHub', module: 'shiftManagement' }), validate(shiftValidation.updateShift), shiftController.updateShift)
+  .delete(auth({ group: 'timeHub', module: 'shiftManagement' }), validate(shiftValidation.deleteShift), shiftController.deleteShift);
 
 module.exports = router;

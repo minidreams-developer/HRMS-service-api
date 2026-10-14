@@ -8,8 +8,8 @@ const router = express.Router();
 
 router
   .route('/')
-  .post(auth('manageAttendance'), validate(offBoardValidation.createOffBoard), offBoardController.createOffBoard)
-  .get(auth('manageAttendance'), validate(offBoardValidation.getOffBoards), offBoardController.getOffBoards);
+  .post(auth({ group: 'peopleHub', module: 'offBoarding' }), validate(offBoardValidation.createOffBoard), offBoardController.createOffBoard)
+  .get(auth({ group: 'peopleHub', module: 'offBoarding' }), validate(offBoardValidation.getOffBoards), offBoardController.getOffBoards);
 
 router
   .route('/summary')

@@ -1,5 +1,6 @@
 module.exports = {
   testEnvironment: 'node',
+  setupFiles: ['<rootDir>/tests/utils/setTestEnv.js'],
   testEnvironmentOptions: {
     NODE_ENV: 'test',
   },

@@ -9,15 +9,15 @@ const router = express.Router();
 router
   .route('/')
   .post(auth('manageAttendance'), validate(leaderboardValidation.createLeaderboard), leaderboardController.createLeaderboard)
-  .get(auth('getUsers'), leaderboardController.getLeaderboards);
+  .get(auth({ group: 'timeHub', module: 'leaderboard' }), leaderboardController.getLeaderboards);
 
 router
   .route('/user/:userId')
-  .get(auth('getUsers'), validate(leaderboardValidation.getLeaderboardByUser), leaderboardController.getLeaderboardByUser);
+  .get(auth({ group: 'timeHub', module: 'leaderboard' }), validate(leaderboardValidation.getLeaderboardByUser), leaderboardController.getLeaderboardByUser);
 
 router
   .route('/:leaderboardId')
-  .get(auth('getUsers'), validate(leaderboardValidation.getLeaderboard),       leaderboardController.getLeaderboard)
+  .get(auth({ group: 'timeHub', module: 'leaderboard' }), validate(leaderboardValidation.getLeaderboard),       leaderboardController.getLeaderboard)
   .patch(auth('manageAttendance'), validate(leaderboardValidation.updateLeaderboard),  leaderboardController.updateLeaderboard)
   .delete(auth('manageAttendance'), validate(leaderboardValidation.deleteLeaderboard), leaderboardController.deleteLeaderboard);
 

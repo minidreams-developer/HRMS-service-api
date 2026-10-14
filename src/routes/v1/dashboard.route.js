@@ -17,18 +17,18 @@ const router = express.Router();
 
 router
   .route('/')
-  .get(auth('manageAttendance'), validate(dashboardValidation.getDashboard), dashboardController.getDashboard);
+  .get(auth({ group: 'standalone', module: 'dashboard' }), validate(dashboardValidation.getDashboard), dashboardController.getDashboard);
 
 router
   .route('/quick-stats')
-  .get(auth('manageAttendance'), validate(dashboardValidation.getQuickStats), dashboardController.getQuickStats);
+  .get(auth({ group: 'standalone', module: 'dashboard' }), validate(dashboardValidation.getQuickStats), dashboardController.getQuickStats);
 
 router
   .route('/attendance-overview')
-  .get(auth('manageAttendance'), validate(dashboardValidation.getAttendanceOverview), dashboardController.getAttendanceOverview);
+  .get(auth({ group: 'standalone', module: 'dashboard' }), validate(dashboardValidation.getAttendanceOverview), dashboardController.getAttendanceOverview);
 
 router
   .route('/payroll-breakdown')
-  .get(auth('manageAttendance'), validate(dashboardValidation.getPayrollBreakdown), dashboardController.getPayrollBreakdown);
+  .get(auth({ group: 'standalone', module: 'dashboard' }), validate(dashboardValidation.getPayrollBreakdown), dashboardController.getPayrollBreakdown);
 
 module.exports = router;

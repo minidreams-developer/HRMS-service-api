@@ -8,20 +8,20 @@ const router = express.Router();
 
 router
   .route('/quick-stats')
-  .get(auth(), validate({ query: overtimeManagementValidation.getQuickStats }), overtimeController.getQuickStats);
+  .get(auth({ group: 'timeHub', module: 'overtimeManagement' }), validate({ query: overtimeManagementValidation.getQuickStats }), overtimeController.getQuickStats);
 
 router
   .route('/approve-all')
-  .patch(auth(), validate({ query: overtimeManagementValidation.approveAll }), overtimeController.approveAll);
+  .patch(auth({ group: 'timeHub', module: 'overtimeManagement' }), validate({ query: overtimeManagementValidation.approveAll }), overtimeController.approveAll);
 
 router
   .route('/')
-  .post(auth(), validate(overtimeManagementValidation.createOvertime), overtimeController.createOvertime)
-  .get(auth(), validate(overtimeManagementValidation.getOvertime), overtimeController.getOvertime);
+  .post(auth({ group: 'timeHub', module: 'overtimeManagement' }), validate(overtimeManagementValidation.createOvertime), overtimeController.createOvertime)
+  .get(auth({ group: 'timeHub', module: 'overtimeManagement' }), validate(overtimeManagementValidation.getOvertime), overtimeController.getOvertime);
 
 router
   .route('/employee/:employeeId')
-  .get(auth(), validate(overtimeManagementValidation.getOvertimeByEmployee), overtimeController.getOvertimeByEmployee);
+  .get(auth({ group: 'timeHub', module: 'overtimeManagement' }), validate(overtimeManagementValidation.getOvertimeByEmployee), overtimeController.getOvertimeByEmployee);
 
 router
   .route('/:overtimeId')

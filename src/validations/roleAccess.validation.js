@@ -8,6 +8,8 @@ const createRole = {
 const getRoles = {
   query: Joi.object().keys({
     name:         Joi.string(),
+    description:  Joi.string(),
+    search:       Joi.string(),
     isSystemRole: Joi.boolean(),
     isDefault:    Joi.boolean(),
     isActive:     Joi.boolean(),

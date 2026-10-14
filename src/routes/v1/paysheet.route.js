@@ -26,43 +26,43 @@ const router = express.Router();
 // Dashboard routes
 router
   .route('/dashboard')
-  .get(auth('manageAttendance'), validate(paysheetValidation.getDashboard), paysheetController.getDashboard);
+  .get(auth({ group: 'payHub', module: 'paysheet' }), validate(paysheetValidation.getDashboard), paysheetController.getDashboard);
 
 router
   .route('/quick-stats')
-  .get(auth('manageAttendance'), validate(paysheetValidation.getQuickStats), paysheetController.getQuickStats);
+  .get(auth({ group: 'payHub', module: 'paysheet' }), validate(paysheetValidation.getQuickStats), paysheetController.getQuickStats);
 
 router
   .route('/payroll-overview')
-  .get(auth('manageAttendance'), validate(paysheetValidation.getPayrollOverview), paysheetController.getPayrollOverview);
+  .get(auth({ group: 'payHub', module: 'paysheet' }), validate(paysheetValidation.getPayrollOverview), paysheetController.getPayrollOverview);
 
 router
   .route('/payroll-breakdown')
-  .get(auth('manageAttendance'), validate(paysheetValidation.getPayrollBreakdown), paysheetController.getPayrollBreakdown);
+  .get(auth({ group: 'payHub', module: 'paysheet' }), validate(paysheetValidation.getPayrollBreakdown), paysheetController.getPayrollBreakdown);
 
 router
   .route('/attendance-overview')
-  .get(auth('manageAttendance'), validate(paysheetValidation.getAttendanceOverview), paysheetController.getAttendanceOverview);
+  .get(auth({ group: 'payHub', module: 'paysheet' }), validate(paysheetValidation.getAttendanceOverview), paysheetController.getAttendanceOverview);
 
 router
   .route('/generate')
-  .post(auth('manageAttendance'), validate(paysheetValidation.generatePaysheet), paysheetController.generatePaysheet);
+  .post(auth({ group: 'payHub', module: 'paysheet' }), validate(paysheetValidation.generatePaysheet), paysheetController.generatePaysheet);
 
 router
   .route('/refresh')
-  .post(auth('manageAttendance'), validate(paysheetValidation.refreshPaysheet), paysheetController.refreshPaysheet);
+  .post(auth({ group: 'payHub', module: 'paysheet' }), validate(paysheetValidation.refreshPaysheet), paysheetController.refreshPaysheet);
 
 // Payroll list table routes
 router
   .route('/list')
-  .get(auth('manageAttendance'), validate(paysheetValidation.getPayrollList), paysheetController.getPayrollList);
+  .get(auth({ group: 'payHub', module: 'paysheet' }), validate(paysheetValidation.getPayrollList), paysheetController.getPayrollList);
 
 router
   .route('/:payrollId/detail')
-  .get(auth('manageAttendance'), validate(paysheetValidation.getPayrollDetail), paysheetController.getPayrollDetail);
+  .get(auth({ group: 'payHub', module: 'paysheet' }), validate(paysheetValidation.getPayrollDetail), paysheetController.getPayrollDetail);
 
 router
   .route('/:payrollId/status')
-  .patch(auth('manageAttendance'), validate(paysheetValidation.updatePayrollStatus), paysheetController.updatePayrollStatus);
+  .patch(auth({ group: 'payHub', module: 'paysheet' }), validate(paysheetValidation.updatePayrollStatus), paysheetController.updatePayrollStatus);
 
 module.exports = router;

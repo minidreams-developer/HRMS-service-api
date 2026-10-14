@@ -54,8 +54,8 @@ router
 
 router
   .route('/agent')
-  .post(auth('manageUsers'), agentController.createAgent)
-  .get(auth('manageUsers'), agentController.getAgentId);
+  .post(auth({ group: 'peopleHub', module: 'agents' }), agentController.createAgent)
+  .get(auth({ group: 'peopleHub', module: 'agents' }), agentController.getAgentId);
 
 // GET /v1/users/agent/:agentId/members
 // Returns employees & staff linked to the agent via workInformation.contractAgent
@@ -63,10 +63,10 @@ router
 // Query params: ?page=1&limit=10
 router
   .route('/agent/:agentId/members')
-  .get(auth('manageUsers'), userController.getAgentMembers)
-  .post(auth('manageUsers'), userController.assignAgentWorkers);
+  .get(auth({ group: 'peopleHub', module: 'agents' }), userController.getAgentMembers)
+  .post(auth({ group: 'peopleHub', module: 'agents' }), userController.assignAgentWorkers);
 
-router.route('/agent/:agentId/members/:workerId').delete(auth('manageUsers'), userController.removeAgentWorker);
+router.route('/agent/:agentId/members/:workerId').delete(auth({ group: 'peopleHub', module: 'agents' }), userController.removeAgentWorker);
 
 router
   .route('/:userId')

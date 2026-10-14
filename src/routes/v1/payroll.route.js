@@ -22,20 +22,20 @@ const router = express.Router();
 
 router
   .route('/')
-  .get(auth('manageAttendance'), validate(payrollValidation.getPayrollList), payrollController.getPayrollList)
-  .post(auth('manageAttendance'), validate(payrollValidation.createPayroll), payrollController.createPayroll);
+  .get(auth({ group: 'payHub', module: 'payroll' }), validate(payrollValidation.getPayrollList), payrollController.getPayrollList)
+  .post(auth({ group: 'payHub', module: 'payroll' }), validate(payrollValidation.createPayroll), payrollController.createPayroll);
 
 router
   .route('/periods')
-  .get(auth('manageAttendance'), validate(payrollValidation.getPayrollPeriods), payrollController.getPayrollPeriods);
+  .get(auth({ group: 'payHub', module: 'payroll' }), validate(payrollValidation.getPayrollPeriods), payrollController.getPayrollPeriods);
 
 router
   .route('/abstract/summary')
-  .get(auth('manageAttendance'), validate(payrollValidation.getPayrollAbstractSummary), payrollController.getPayrollAbstractSummary);
+  .get(auth({ group: 'payHub', module: 'payroll' }), validate(payrollValidation.getPayrollAbstractSummary), payrollController.getPayrollAbstractSummary);
 
 router
   .route('/abstract/export')
-  .get(auth('manageAttendance'), validate(payrollValidation.getPayrollAbstractExport), payrollController.getPayrollAbstractExport);
+  .get(auth({ group: 'payHub', module: 'payroll' }), validate(payrollValidation.getPayrollAbstractExport), payrollController.getPayrollAbstractExport);
 
 router
   .route('/periods/:year/:month/finalize')
@@ -43,11 +43,11 @@ router
 
 router
   .route('/periods/finalized')
-  .get(auth('manageAttendance'), validate(payrollValidation.getFinalizedPayrollPeriods), payrollController.getFinalizedPayrollPeriods);
+  .get(auth({ group: 'payHub', module: 'payroll' }), validate(payrollValidation.getFinalizedPayrollPeriods), payrollController.getFinalizedPayrollPeriods);
 
 router
   .route('/periods/:year/:month/abstract')
-  .get(auth('manageAttendance'), validate(payrollValidation.getPayrollAbstract), payrollController.getPayrollAbstract);
+  .get(auth({ group: 'payHub', module: 'payroll' }), validate(payrollValidation.getPayrollAbstract), payrollController.getPayrollAbstract);
 
 router
   .route('/payslips/options')

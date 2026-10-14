@@ -12,8 +12,8 @@ router
 
 router
   .route('/')
-  .post(auth(), validate(leaveRequestsValidation.createLeaveRequest), leaveRequestsController.createLeaveRequests)
-  .get(auth(), validate(leaveRequestsValidation.getLeaveRequests), leaveRequestsController.getLeaveRequests);
+  .post(auth({ group: 'timeHub', module: 'leaveAttendance' }), validate(leaveRequestsValidation.createLeaveRequest), leaveRequestsController.createLeaveRequests)
+  .get(auth({ group: 'timeHub', module: 'leaveAttendance' }), validate(leaveRequestsValidation.getLeaveRequests), leaveRequestsController.getLeaveRequests);
 
 router
   .route('/employee/:employeeId')

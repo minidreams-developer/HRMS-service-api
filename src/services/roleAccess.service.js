@@ -24,7 +24,13 @@ const createRole = async (roleBody) => {
  * @returns {Promise<QueryResult>}
  */
 const queryRoles = async (filter, options) => {
-  const result = await Role.paginate(filter, options);
+  const query = { ...filter };
+  if (query.search) {
+    const pattern = { $regex: query.search, $options: 'i' };
+    delete query.search;
+    query.$or = [{ name: pattern }, { description: pattern }, { roleId: pattern }];
+  }
+  const result = await Role.paginate(query, options);
   await Role.populate(result.results, { path: 'user', select: 'name email employeeId' });
   return result;
 };
@@ -60,7 +66,7 @@ const updateRoleById = async (roleId, updateBody) => {
     throw new ApiError(httpStatus.NOT_FOUND, 'Role not found');
   }
 
-  if (role.isSystemRole && updateBody.isSystemRole === false) {
+  if (updateBody.isSystemRole !== undefined && updateBody.isSystemRole !== role.isSystemRole) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Cannot change system role status');
   }
 

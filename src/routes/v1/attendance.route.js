@@ -8,8 +8,8 @@ const router = express.Router();
 
 router
   .route('/')
-  .post(auth('manageAttendance'), validate(attendanceValidation.createAttendance), attendanceController.createAttendance)
-    .get(auth('manageAttendance'), validate(attendanceValidation.getAttendances), attendanceController.getAttendances);
+  .post(auth({ group: 'timeHub', module: 'attendance' }), validate(attendanceValidation.createAttendance), attendanceController.createAttendance)
+    .get(auth({ group: 'timeHub', module: 'attendance' }), validate(attendanceValidation.getAttendances), attendanceController.getAttendances);
 
 router.route('/present-today').get(auth(), (req, res, next) => {
   if (req.query.role && !['employee', 'staff'].includes(req.query.role)) return res.status(400).send({ code: 400, message: 'role must be employee or staff' });

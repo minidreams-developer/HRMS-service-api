@@ -6,7 +6,10 @@ const dynamicPermissions = require('../config/dynamicPermissions');
 const { Role } = require('../models');
 
 const hasDynamicPermission = async (user, requiredRight) => {
-  const mapping = typeof requiredRight === 'string' ? dynamicPermissions[requiredRight] : requiredRight;
+  const configured = typeof requiredRight === 'string' ? dynamicPermissions[requiredRight] : requiredRight;
+  const mapping = configured && !configured.action && !configured.actions
+    ? { ...configured, action: ({ GET: 'view', POST: 'add', PUT: 'edit', PATCH: 'edit', DELETE: 'delete' })[configured.requestMethod] }
+    : configured;
   if (!mapping || !user.roleId) return false;
   const role = await Role.findOne({ _id: user.roleId, isActive: true }).select('permissions').lean();
   const group = role?.permissions?.find((item) => item.group === mapping.group);
@@ -22,13 +25,15 @@ const verifyCallback = (req, resolve, reject, requiredRights, dynamicContext) =>
   }
   req.user = user;
 
-  if (requiredRights.length) {
+  if (requiredRights.length || dynamicContext) {
     const userRights = roleRights.get(user.role) || [];
-    const hasRequiredRights = await Promise.all(requiredRights.map(async (requiredRight) => (
-      userRights.includes(requiredRight) || hasDynamicPermission(user, requiredRight)
-    ))).then((results) => results.every(Boolean));
+    const hasRequiredRights = requiredRights.length > 0
+      ? await Promise.all(requiredRights.map(async (requiredRight) => (
+        userRights.includes(requiredRight) || hasDynamicPermission(user, requiredRight)
+      ))).then((results) => results.every(Boolean))
+      : false;
     const hasContextPermission = dynamicContext
-      ? await hasDynamicPermission(user, dynamicContext)
+      ? await hasDynamicPermission(user, { ...dynamicContext, requestMethod: req.method })
       : false;
     if (!hasRequiredRights && !hasContextPermission && req.params.userId !== user.id) {
       return reject(new ApiError(httpStatus.FORBIDDEN, 'Forbidden'));

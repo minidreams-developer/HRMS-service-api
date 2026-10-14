@@ -13,17 +13,17 @@ router
   // cloudinaryUpload runs first: parses multipart/form-data and uploads files to Cloudinary.
   // After it completes, req.files contains the uploaded file info.
   // The controller then merges them into req.body.images before saving.
-  .post(auth('manageAnnouncements'), cloudinaryUpload('announcements', 'images', 10), validate(announcementValidation.createAnnouncement), announcementController.createAnnouncement)
-  .get(auth('manageAnnouncements'), validate(announcementValidation.getAnnouncements), announcementController.getAnnouncements);
+  .post(auth({ group: 'standalone', module: 'announcement' }), cloudinaryUpload('announcements', 'images', 10), validate(announcementValidation.createAnnouncement), announcementController.createAnnouncement)
+  .get(auth({ group: 'standalone', module: 'announcement' }), validate(announcementValidation.getAnnouncements), announcementController.getAnnouncements);
 
 router.get('/me', auth(), validate(announcementValidation.getAnnouncements), announcementController.getMyAnnouncements);
 
 // ── Single announcement ──────────────────────────────────────────────────────
 router
   .route('/:announcementId')
-  .get(auth('manageAnnouncements'), validate(announcementValidation.getAnnouncement), announcementController.getAnnouncement)
-  .patch(auth('manageAnnouncements'), validate(announcementValidation.updateAnnouncement), announcementController.updateAnnouncement)
-  .delete(auth('manageAnnouncements'), validate(announcementValidation.deleteAnnouncement), announcementController.deleteAnnouncement);
+  .get(auth({ group: 'standalone', module: 'announcement' }), validate(announcementValidation.getAnnouncement), announcementController.getAnnouncement)
+  .patch(auth({ group: 'standalone', module: 'announcement' }), validate(announcementValidation.updateAnnouncement), announcementController.updateAnnouncement)
+  .delete(auth({ group: 'standalone', module: 'announcement' }), validate(announcementValidation.deleteAnnouncement), announcementController.deleteAnnouncement);
 
 router.get('/me/:announcementId', auth(), validate(announcementValidation.getAnnouncement), announcementController.getMyAnnouncement);
 

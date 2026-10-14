@@ -18,7 +18,7 @@ const createRole = catchAsync(async (req, res) => {
  * List all roles with optional filters and pagination.
  */
 const getRoles = catchAsync(async (req, res) => {
-  const filter = pick(req.query, ['name', 'isSystemRole', 'isDefault', 'isActive']);
+  const filter = pick(req.query, ['name', 'description', 'search', 'isSystemRole', 'isDefault', 'isActive']);
   const options = pick(req.query, ['sortBy', 'limit', 'page']);
   const result = await roleAccessService.queryRoles(filter, options);
   res.send(result);
