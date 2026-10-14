@@ -79,7 +79,8 @@ const updateAdjustment = catchAsync(async (req, res) => {
 const updateAdjustmentStatus = catchAsync(async (req, res) => {
   const adjustment = await adjustmentService.updateAdjustmentStatus(
     req.params.adjustmentId,
-    req.body.status
+    req.body.status,
+    req.user?._id
   );
   res.send(adjustment);
 });

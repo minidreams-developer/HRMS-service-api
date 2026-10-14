@@ -115,6 +115,7 @@ const payrollSchema = new mongoose.Schema(
       },
       resumeReason: { type: String, trim: true },
       resumeRemarks: { type: String, trim: true },
+      resumeSource: { type: String, enum: ['manual', 'automatic'] },
       adjustArrears: { type: Boolean, default: false },
       arrearsAmount: { type: Number, min: 0, default: 0 },
       payPendingSalary: { type: Boolean, default: false },

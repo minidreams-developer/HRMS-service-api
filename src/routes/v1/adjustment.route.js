@@ -1,5 +1,8 @@
 const express = require('express');
 const adjustmentController = require('../../controllers/adjustment.controller');
+const auth = require('../../middlewares/auth');
+const validate = require('../../middlewares/validate');
+const validation = require('../../validations/adjustment.validation');
 
 const router = express.Router();
 
@@ -18,25 +21,25 @@ const router = express.Router();
 
 router
   .route('/quick-stats')
-  .get(adjustmentController.getQuickStats);
+  .get(auth('manageAttendance'), validate(validation.quickStats), adjustmentController.getQuickStats);
 
 router
   .route('/pending')
-  .get(adjustmentController.getPendingAdjustments);
+  .get(auth('manageAttendance'), validate(validation.list), adjustmentController.getPendingAdjustments);
 
 router
   .route('/')
-  .post(adjustmentController.createAdjustment)
-  .get(adjustmentController.getAdjustments);
+  .post(auth('manageAttendance'), validate(validation.create), adjustmentController.createAdjustment)
+  .get(auth('manageAttendance'), validate(validation.list), adjustmentController.getAdjustments);
 
 router
   .route('/:adjustmentId/status')
-  .patch(adjustmentController.updateAdjustmentStatus);
+  .patch(auth('manageAttendance'), validate(validation.status), adjustmentController.updateAdjustmentStatus);
 
 router
   .route('/:adjustmentId')
-  .get(adjustmentController.getAdjustment)
-  .patch(adjustmentController.updateAdjustment)
-  .delete(adjustmentController.deleteAdjustment);
+  .get(auth('manageAttendance'), validate(validation.id), adjustmentController.getAdjustment)
+  .patch(auth('manageAttendance'), validate(validation.update), adjustmentController.updateAdjustment)
+  .delete(auth('manageAttendance'), validate(validation.id), adjustmentController.deleteAdjustment);
 
 module.exports = router;

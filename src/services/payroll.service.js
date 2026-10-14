@@ -842,6 +842,7 @@ const resumePayroll = async (employeeId, month, year, resumeRemarks = '', resume
   payroll.stopDetails.resumedAt = resumeAt;
   payroll.stopDetails.resumeReason = resumeOptions.resumeReason || undefined;
   payroll.stopDetails.resumeRemarks = resumeRemarks || undefined;
+  payroll.stopDetails.resumeSource = 'manual';
   payroll.stopDetails.adjustArrears = Boolean(resumeOptions.adjustArrears);
   payroll.stopDetails.arrearsAmount = resumeOptions.adjustArrears ? Number(resumeOptions.arrearsAmount || 0) : 0;
   payroll.stopDetails.payPendingSalary = Boolean(resumeOptions.payPendingSalary);
@@ -859,6 +860,38 @@ const resumePayroll = async (employeeId, month, year, resumeRemarks = '', resume
     return Payroll.findById(payroll._id);
   }
   return payroll;
+};
+
+/**
+ * Resume stopped payroll records whose scheduled resume date has arrived.
+ * The status predicate is part of the update so concurrent scheduler runs
+ * cannot resume the same payroll twice.
+ */
+const resumeDuePayrolls = async (now = new Date()) => {
+  const duePayrolls = await Payroll.find({
+    status: 'stopped',
+    'stopDetails.resumeOn': { $exists: true, $ne: null, $lte: now },
+  }).select('_id').lean();
+
+  let resumed = 0;
+  for (const payroll of duePayrolls) {
+    const resumedAt = new Date(now);
+    const updated = await Payroll.findOneAndUpdate(
+      { _id: payroll._id, status: 'stopped' },
+      {
+        $set: {
+          status: 'resumed',
+          'stopDetails.resumedAt': resumedAt,
+          'stopDetails.resumeSource': 'automatic',
+          'stopDetails.resumeRemarks': 'Payroll automatically resumed on the scheduled resume date.',
+        },
+      },
+      { new: true, runValidators: true }
+    );
+    if (updated) resumed += 1;
+  }
+
+  return { matched: duePayrolls.length, resumed };
 };
 
 const getStopPayrollDetail = async (employeeId, month, year) => {
@@ -1102,6 +1135,7 @@ module.exports = {
   deletePayrollById,
   stopPayroll,
   resumePayroll,
+  resumeDuePayrolls,
   getStoppedPayrolls,
   getStopPayrollList,
   getStopPayrollQuickStats,

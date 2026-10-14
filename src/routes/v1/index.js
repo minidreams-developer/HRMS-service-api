@@ -158,6 +158,10 @@ const defaultRoutes = [
     route: require('./adjustment.route'),
   },
   {
+    path: '/payroll/adjustments',
+    route: require('./adjustment.route'),
+  },
+  {
     path: '/paysheets',
     route: paysheetRoute,
   },

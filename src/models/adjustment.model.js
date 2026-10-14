@@ -113,6 +113,13 @@ const adjustmentSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
     },
+    approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    approvedAt: Date,
+    cancelledBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    cancelledAt: Date,
+    appliedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    appliedAt: Date,
+    payrollId: { type: mongoose.Schema.Types.ObjectId, ref: 'Payroll' },
 
     remarks: {
       type: String,

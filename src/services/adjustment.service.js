@@ -1,7 +1,7 @@
 const httpStatus = require('http-status');
 const mongoose = require('mongoose');
 const Adjustment = require('../models/adjustment.model');
-const { User, Payroll } = require('../models');
+const { User, Payroll, PayrollPeriod } = require('../models');
 const ApiError = require('../utils/ApiError');
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -58,6 +58,9 @@ const getQuickStats = async (month, year) => {
  * @returns {Promise<Adjustment|Adjustment[]>}
  */
 const createAdjustment = async (body, createdById) => {
+  if (await PayrollPeriod.exists({ month: body.payrollMonth, year: body.payrollYear, status: 'finalized' })) {
+    throw new ApiError(httpStatus.CONFLICT, 'Cannot create an adjustment for a finalized payroll period');
+  }
   const data = {
     forWhom: body.forWhom,
     type: body.type,
@@ -92,6 +95,7 @@ const createAdjustment = async (body, createdById) => {
 
     const emp = await User.findOne(empQuery).lean();
     if (!emp) throw new ApiError(httpStatus.NOT_FOUND, 'Employee not found');
+    if (!['employee', 'staff'].includes(emp.role)) throw new ApiError(httpStatus.BAD_REQUEST, 'Adjustments support employee and staff users only');
 
     data.employeeId = emp._id;
     const adj = await Adjustment.create(data);
@@ -194,7 +198,7 @@ const getAdjustmentById = async (id) => {
  * @param {string} status
  * @returns {Promise<Adjustment>}
  */
-const updateAdjustmentStatus = async (id, status) => {
+const updateAdjustmentStatus = async (id, status, actorId = null) => {
   const adj = await Adjustment.findById(id);
   if (!adj) throw new ApiError(httpStatus.NOT_FOUND, 'Adjustment not found');
 
@@ -203,12 +207,25 @@ const updateAdjustmentStatus = async (id, status) => {
     throw new ApiError(httpStatus.BAD_REQUEST, `Invalid status: ${status}`);
   }
 
-  adj.status = status;
-
-  // When approved + appliedToPayroll = true → apply it to the payroll record
-  if (status === 'approved' && adj.appliedToPayroll) {
+  if (status === 'applied') {
+    if (adj.status !== 'approved') throw new ApiError(httpStatus.BAD_REQUEST, 'Only approved adjustments can be applied');
+    if (!adj.appliedToPayroll) throw new ApiError(httpStatus.BAD_REQUEST, 'This adjustment is not configured for payroll application');
     await applyAdjustmentToPayroll(adj);
     adj.status = 'applied';
+    adj.appliedBy = actorId;
+    adj.appliedAt = new Date();
+  } else if (status === 'approved') {
+    if (adj.status !== 'pending') throw new ApiError(httpStatus.BAD_REQUEST, 'Only pending adjustments can be approved');
+    adj.status = 'approved';
+    adj.approvedBy = actorId;
+    adj.approvedAt = new Date();
+  } else if (['rejected', 'canceled'].includes(status)) {
+    if (!['draft', 'pending', 'approved'].includes(adj.status)) throw new ApiError(httpStatus.BAD_REQUEST, `Cannot change adjustment with status "${adj.status}"`);
+    adj.status = status;
+    adj.cancelledBy = actorId;
+    adj.cancelledAt = new Date();
+  } else {
+    adj.status = status;
   }
 
   await adj.save();
@@ -222,14 +239,20 @@ const updateAdjustmentStatus = async (id, status) => {
  */
 const applyAdjustmentToPayroll = async (adj) => {
   if (!adj.employeeId) return;
+  if (await PayrollPeriod.exists({ month: adj.payrollMonth, year: adj.payrollYear, status: 'finalized' })) {
+    throw new ApiError(httpStatus.CONFLICT, 'Cannot apply an adjustment to a finalized payroll period');
+  }
+  const field = adj.type === 'addition'
+    ? (['bonus', 'incentive'].includes(adj.component) ? 'extras' : 'otherWages')
+    : (adj.component === 'advance' || adj.component === 'emi' ? 'loanAndAdvance' : (adj.component === 'penalty' ? 'penalties' : 'otherDeductions'));
+  const payroll = await Payroll.findOne({ employeeId: adj.employeeId, month: adj.payrollMonth, year: adj.payrollYear });
+  if (payroll && ['paid', 'stopped'].includes(payroll.status)) throw new ApiError(httpStatus.CONFLICT, `Cannot apply adjustment to ${payroll.status} payroll`);
 
-  const field = adj.type === 'addition' ? 'additionPayment' : 'deductions';
-
-  await Payroll.findOneAndUpdate(
+  const updated = await Payroll.findOneAndUpdate(
     { employeeId: adj.employeeId, month: adj.payrollMonth, year: adj.payrollYear },
-    { $inc: { [field]: adj.amount } },
-    { upsert: true }
+    { $inc: { [field]: adj.amount } }, { upsert: true, new: true }
   );
+  adj.payrollId = updated._id;
 };
 
 // ─── Update Adjustment ────────────────────────────────────────────────────────
@@ -245,6 +268,9 @@ const updateAdjustmentById = async (id, updateBody) => {
 
   if (!['draft', 'pending'].includes(adj.status)) {
     throw new ApiError(httpStatus.BAD_REQUEST, `Cannot edit adjustment with status "${adj.status}"`);
+  }
+  if (await PayrollPeriod.exists({ month: updateBody.payrollMonth || adj.payrollMonth, year: updateBody.payrollYear || adj.payrollYear, status: 'finalized' })) {
+    throw new ApiError(httpStatus.CONFLICT, 'Cannot edit an adjustment for a finalized payroll period');
   }
 
   const editableFields = [
