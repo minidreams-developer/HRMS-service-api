@@ -818,7 +818,7 @@ const stopPayroll = async (employeeId, stopData) => {
  * Resume payroll for an employee. Updates payroll record to mark as resumed.
  * Sets status to 'resumed' and records resumption timestamp.
  */
-const resumePayroll = async (employeeId, month, year, resumeRemarks = '') => {
+const resumePayroll = async (employeeId, month, year, resumeRemarks = '', resumeOptions = {}, actorId = null) => {
   const payroll = await Payroll.findOne({ employeeId, month, year });
 
   if (!payroll) {
@@ -828,11 +828,23 @@ const resumePayroll = async (employeeId, month, year, resumeRemarks = '') => {
   if (payroll.status !== 'stopped') {
     throw new ApiError(httpStatus.BAD_REQUEST, `Cannot resume payroll. Current status is '${payroll.status}', expected 'stopped'`);
   }
-  if (payroll.status === 'paid') throw new ApiError(httpStatus.CONFLICT, 'Paid payroll cannot be resumed');
+  const now = new Date();
+  const resumeAt = resumeOptions.resumeDate ? new Date(resumeOptions.resumeDate) : now;
+  if (Number.isNaN(resumeAt.getTime())) throw new ApiError(httpStatus.BAD_REQUEST, 'resumeDate must be a valid date');
+  const stoppedAt = payroll.stopDetails?.stoppedAt ? new Date(payroll.stopDetails.stoppedAt) : null;
+  const effectiveFrom = payroll.stopDetails?.effectiveFrom ? new Date(payroll.stopDetails.effectiveFrom) : null;
+  if (resumeAt > now) throw new ApiError(httpStatus.BAD_REQUEST, 'resumeDate cannot be in the future');
+  if (stoppedAt && resumeAt < stoppedAt) throw new ApiError(httpStatus.BAD_REQUEST, 'resumeDate cannot be earlier than stoppedAt');
+  if (effectiveFrom && resumeAt < effectiveFrom) throw new ApiError(httpStatus.BAD_REQUEST, 'resumeDate cannot be earlier than effectiveFrom');
 
   // Update the payroll to resumed status
   payroll.status = 'resumed';
-  payroll.stopDetails.resumedAt = new Date();
+  payroll.stopDetails.resumedAt = resumeAt;
+  payroll.stopDetails.resumeReason = resumeOptions.resumeReason || undefined;
+  payroll.stopDetails.resumeRemarks = resumeRemarks || undefined;
+  payroll.stopDetails.adjustArrears = Boolean(resumeOptions.adjustArrears);
+  payroll.stopDetails.arrearsAmount = resumeOptions.adjustArrears ? Number(resumeOptions.arrearsAmount || 0) : 0;
+  payroll.stopDetails.payPendingSalary = Boolean(resumeOptions.payPendingSalary);
 
   // Add resume remarks if provided
   if (resumeRemarks) {
@@ -842,7 +854,39 @@ const resumePayroll = async (employeeId, month, year, resumeRemarks = '') => {
   }
 
   await payroll.save();
+  if (resumeOptions.payPendingSalary) {
+    await processPayroll(employeeId, month, year, actorId);
+    return Payroll.findById(payroll._id);
+  }
   return payroll;
+};
+
+const getStopPayrollDetail = async (employeeId, month, year) => {
+  const payroll = await Payroll.findOne({ employeeId, month, year }).lean();
+  if (!payroll || !payroll.stopDetails) throw new ApiError(httpStatus.NOT_FOUND, 'Stopped payroll not found');
+  const employee = await User.findById(employeeId)
+    .select('employeeId name profilePic workInformation')
+    .populate('workInformation.SalaryDetails')
+    .lean();
+  if (!employee) throw new ApiError(httpStatus.NOT_FOUND, 'Employee not found');
+  const department = employee.workInformation?.department;
+  const reportingPersonId = employee.workInformation?.reportingPerson;
+  const reportingPerson = reportingPersonId && mongoose.Types.ObjectId.isValid(String(reportingPersonId))
+    ? await User.findById(reportingPersonId).select('name').lean() : null;
+  const currentSalary = employee.workInformation?.SalaryDetails?.monthlyCTC || employee.workInformation?.SalaryDetails?.basicSalary || null;
+  return {
+    employee: {
+      employeeId: employee.employeeId, name: employee.name, department: payroll.snapshot?.employee?.department || department || null,
+      designation: payroll.snapshot?.employee?.designation || employee.workInformation?.designation || null,
+      currentSalary, reportingPerson: reportingPerson ? { id: reportingPerson._id, name: reportingPerson.name } : null,
+    },
+    payroll: { payrollId: payroll._id, month: payroll.month, year: payroll.year, amount: Number(payroll.snapshot?.takeHome ?? payroll.totalPayableAmount ?? 0), status: payroll.status },
+    stopDetails: payroll.stopDetails,
+    resumeDetails: payroll.stopDetails.resumedAt ? {
+      resumedAt: payroll.stopDetails.resumedAt, resumeReason: payroll.stopDetails.resumeReason || null, resumeRemarks: payroll.stopDetails.resumeRemarks || null,
+      adjustArrears: Boolean(payroll.stopDetails.adjustArrears), arrearsAmount: payroll.stopDetails.arrearsAmount || 0, payPendingSalary: Boolean(payroll.stopDetails.payPendingSalary),
+    } : null,
+  };
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1062,6 +1106,7 @@ module.exports = {
   getStopPayrollList,
   getStopPayrollQuickStats,
   getStopPayrollDashboard,
+  getStopPayrollDetail,
   getPayrollHistoryForUser,
   getPayrollForUser,
   getPayslip,

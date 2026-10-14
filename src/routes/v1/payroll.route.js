@@ -61,6 +61,8 @@ router.route('/stop/quick-stats').get(auth('manageAttendance'), validate(payroll
 router.route('/stop/list').get(auth('manageAttendance'), validate(payrollValidation.getStopPayrollDashboard), payrollController.getStopPayrollList);
 router.route('/stop/dashboard').get(auth('manageAttendance'), validate(payrollValidation.getStopPayrollDashboard), payrollController.getStopPayrollDashboard);
 
+router.route('/:employeeId/stop-detail').get(auth('manageAttendance'), validate(payrollValidation.getStopPayrollDetail), payrollController.getStopPayrollDetail);
+
 router
   .route('/me')
   .get(auth(), validate(payrollValidation.getMyPayroll), payrollController.getMyPayroll);

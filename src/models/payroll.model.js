@@ -113,6 +113,11 @@ const payrollSchema = new mongoose.Schema(
       resumedAt: {
         type: Date,
       },
+      resumeReason: { type: String, trim: true },
+      resumeRemarks: { type: String, trim: true },
+      adjustArrears: { type: Boolean, default: false },
+      arrearsAmount: { type: Number, min: 0, default: 0 },
+      payPendingSalary: { type: Boolean, default: false },
     },
 
     // Snapshot of computed values (populated when status → processed/paid)

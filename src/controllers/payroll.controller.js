@@ -179,9 +179,13 @@ const stopPayroll = catchAsync(async (req, res) => {
  * Body: { month, year, resumeRemarks? }
  */
 const resumePayroll = catchAsync(async (req, res) => {
-  const { month, year, resumeRemarks } = req.body;
-  const result = await payrollService.resumePayroll(req.params.employeeId, month, year, resumeRemarks);
+  const { month, year, resumeRemarks, resumeDate, resumeReason, adjustArrears, arrearsAmount, payPendingSalary } = req.body;
+  const result = await payrollService.resumePayroll(req.params.employeeId, month, year, resumeRemarks, { resumeDate, resumeReason, adjustArrears, arrearsAmount, payPendingSalary }, req.user._id);
   res.status(httpStatus.OK).send(result);
+});
+
+const getStopPayrollDetail = catchAsync(async (req, res) => {
+  res.send(await payrollService.getStopPayrollDetail(req.params.employeeId, Number(req.query.month), Number(req.query.year)));
 });
 
 /**
@@ -234,6 +238,7 @@ module.exports = {
   deletePayroll,
   stopPayroll,
   resumePayroll,
+  getStopPayrollDetail,
   getStoppedPayrolls,
   getStopPayrollQuickStats,
   getStopPayrollList,

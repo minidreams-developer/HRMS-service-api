@@ -185,8 +185,22 @@ const resumePayroll = {
   body: Joi.object().keys({
     month: Joi.number().integer().min(1).max(12).required(),
     year: Joi.number().integer().min(2000).max(2100).required(),
+    resumeDate: Joi.date().optional(),
+    resumeReason: Joi.string().trim().allow('').optional(),
+    adjustArrears: Joi.boolean().optional().default(false),
+    arrearsAmount: Joi.number().min(0).optional(),
+    payPendingSalary: Joi.boolean().optional().default(false),
     resumeRemarks: Joi.string().allow('').optional(),
+  }).custom((value, helpers) => {
+    if (value.adjustArrears && value.arrearsAmount === undefined) return helpers.error('any.custom', { message: 'arrearsAmount is required when adjustArrears is true' });
+    if (!value.adjustArrears && value.arrearsAmount !== undefined && Number(value.arrearsAmount) !== 0) return helpers.error('any.custom', { message: 'arrearsAmount must be 0 when adjustArrears is false' });
+    return value;
   }),
+};
+
+const getStopPayrollDetail = {
+  params: Joi.object().keys({ employeeId: Joi.string().custom(objectId).required() }),
+  query: Joi.object().keys({ month: Joi.number().integer().min(1).max(12).required(), year: Joi.number().integer().min(2000).max(2100).required() }),
 };
 
 const getStoppedPayrolls = {
@@ -228,6 +242,7 @@ module.exports = {
   deletePayroll,
   stopPayroll,
   resumePayroll,
+  getStopPayrollDetail,
   getStoppedPayrolls,
   getStopPayrollDashboard,
 };
