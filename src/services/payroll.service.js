@@ -999,13 +999,20 @@ const getStopPayrollList = async (query = {}, options = {}) => {
   const filter = { status: query.status || { $in: ['stopped', 'resumed', 'processed', 'paid'] } };
   if (query.month) filter.month = Number(query.month); if (query.year) filter.year = Number(query.year);
   const payrolls = await Payroll.find(filter).populate('employeeId', 'name employeeId role profilePic workInformation').sort({ updatedAt: -1 }).lean();
+  const refValue = (value) => (value && typeof value === 'object' && value._id ? value._id : value);
+  const departmentIds = payrolls.map((payroll) => {
+    const employee = payroll.employeeId || {}; const snapshot = payroll.snapshot?.employee || {};
+    return refValue(snapshot.department || employee.workInformation?.department);
+  }).filter((value) => value && mongoose.Types.ObjectId.isValid(String(value)));
+  const departments = await Department.find({ _id: { $in: departmentIds } }).select('departmentName departmentCode').lean();
+  const departmentsById = new Map(departments.map((department) => [String(department._id), department]));
   const search = String(query.search || '').toLowerCase();
   const rows = payrolls.filter((payroll) => {
     const employee = payroll.employeeId || {}; const snapshot = payroll.snapshot?.employee || {};
     if (!['employee', 'staff'].includes(employee.role || snapshot.role)) return false;
     if (query.role && (employee.role || snapshot.role) !== query.role) return false;
     if (query.departmentId) {
-      const department = snapshot.department || employee.workInformation?.department;
+      const department = refValue(snapshot.department || employee.workInformation?.department);
       if (String(department) !== String(query.departmentId)) return false;
     }
     return !search || `${employee.name || snapshot.name || ''} ${employee.employeeId || snapshot.employeeCode || ''}`.toLowerCase().includes(search);
@@ -1014,7 +1021,10 @@ const getStopPayrollList = async (query = {}, options = {}) => {
     return {
       payrollId: payroll._id, employeeId: employee._id || payroll.employeeId, employeeCode: employee.employeeId || snapshot.employeeCode,
       name: employee.name || snapshot.name, profilePic: employee.profilePic || null, role: employee.role || snapshot.role,
-      department: snapshot.department || employee.workInformation?.department || null, shift: null,
+      department: (() => {
+        const departmentRef = refValue(snapshot.department || employee.workInformation?.department);
+        return departmentsById.get(String(departmentRef)) || (departmentRef ? { id: departmentRef, name: departmentRef } : null);
+      })(), shift: null,
       reason: payroll.stopDetails?.reason || null, stopType: payroll.stopDetails?.stopType || null,
       from: payroll.stopDetails?.effectiveFrom || payroll.stopDetails?.stoppedAt || null,
       till: released ? payroll.stopDetails.resumedAt : (payroll.stopDetails?.resumeOn || null),
@@ -1073,6 +1083,15 @@ const getPayslip = async (payrollId, employeeId = null) => {
   }
   const snapshot = payroll.snapshot || {};
   const employee = snapshot.employee || {};
+  const employeeDetails = await User.findById(payroll.employeeId)
+    .select('-password -firebaseToken -faceEmbedding')
+    .populate('address')
+    .populate('emergencyContact')
+    .populate('userDocuments')
+    .populate('workInformation.bankDetails')
+    .populate('workInformation.SalaryDetails')
+    .populate('workInformation.designationId')
+    .lean();
   let department = employee.department || null;
   if (department && mongoose.Types.ObjectId.isValid(String(department))) {
     const departmentRecord = await Department.findById(department).select('departmentName').lean();
@@ -1089,6 +1108,7 @@ const getPayslip = async (payrollId, employeeId = null) => {
       processedAt: payroll.processedAt || null,
       paidAt: payroll.paidAt || null,
       employee: { id: employee.id || payroll.employeeId, employeeCode: employee.employeeCode, name: employee.name, role: employee.role, designation: employee.designation, department, branch: employee.branch },
+      employeeDetails: employeeDetails || null,
       attendance: { fullDays: snapshot.fullDays || 0, halfDays: snapshot.halfDays || 0, absentDays: snapshot.absentDays || 0, paidLeaves: snapshot.paidLeaves || 0, unpaidLeaves: snapshot.unpaidLeaves || 0, overtimeHours: snapshot.overtimeHours || 0 },
       earnings: { grossWages: snapshot.grossWages || 0, earnedWages: snapshot.earnedWages || 0, overtimeAmount: snapshot.overtimeAmount || 0, extras: payroll.extras || 0, otherWages: payroll.otherWages || 0, grossEarnings: snapshot.grossEarnings || 0 },
       deductions: { deductions: payroll.deductions || 0, penalties: payroll.penalties || 0, loanAndAdvance: payroll.loanAndAdvance || 0, otherDeductions: payroll.otherDeductions || 0, pfAmount, esiAmount, totalDeductions: Math.max(0, (snapshot.grossEarnings || 0) - (snapshot.takeHome || 0)) },
