@@ -4,6 +4,7 @@ const EmergencyContact = require('../models/emergencyContact.model');
 const UserDocument = require('../models/userDocuments.model');
 const ApiError = require('../utils/ApiError');
 const { generateEmployeeId: generateId, generateStaffId: generateStaffIdUtil, generateAgentId: generateAgentIdUtil } = require('../utils/employeeId');
+const { allocateNextNumber } = require('./seriesConfiguration.service');
 const { setPending, getPending, clearPending } = require('../utils/pendingCode');
 const mongoose = require('mongoose');
 
@@ -175,7 +176,8 @@ const registerEmployee = async (body) => {
   //    - Otherwise use pending or generate a new one
   let employeeId = body.employeeId;
   if (!employeeId) {
-    employeeId = getPending(EMP_ID_KEY);
+    const seriesType = ['employee', 'staff'].includes(body.role) ? body.role : null;
+    employeeId = (seriesType && await allocateNextNumber(seriesType)) || getPending(EMP_ID_KEY);
     if (!employeeId) {
       employeeId = generateId();
     }

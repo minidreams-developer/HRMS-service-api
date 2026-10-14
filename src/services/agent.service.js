@@ -7,8 +7,10 @@ const UserDocument = require('../models/userDocuments.model');
 const EmergencyContact = require('../models/emergencyContact.model');
 const Commission = require('../models/commission.model');
 const EmployeeIds = require('../utils/employeeId');
+const { allocateNextNumber } = require('./seriesConfiguration.service');
 
 const createAgent = async (agentBody) => {
+  if (!agentBody.agentId) agentBody.agentId = await allocateNextNumber('agent') || EmployeeIds.generateAgentId();
   if (agentBody.agentId && await User.exists({ agentId: agentBody.agentId })) throw new ApiError(httpStatus.CONFLICT, 'Agent ID already exists');
   const branchId = agentBody.workInformation?.branch;
   if (branchId) {

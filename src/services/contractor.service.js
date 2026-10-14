@@ -7,6 +7,7 @@ const EmergencyContact = require('../models/emergencyContact.model');
 const ApiError = require('../utils/ApiError');
 const { setPending, getPending, clearPending } = require('../utils/pendingCode');
 const { ContractorWorkerAssignment } = require('../models');
+const { allocateNextNumber } = require('./seriesConfiguration.service');
 
 const CTR_ID_KEY = 'contractorId';
 
@@ -46,7 +47,7 @@ const generateContractorId = async () => {
   let contractorId;
   let exists = true;
   while (exists) {
-    contractorId = generateContractorIdCode();
+    contractorId = await allocateNextNumber('contractor') || generateContractorIdCode();
     // eslint-disable-next-line no-await-in-loop
     exists = await User.exists({ employeeId: contractorId });
   }
@@ -142,7 +143,7 @@ const registerContractor = async (body) => {
   // ── 4. Resolve contractor ID ───────────────────────────────────────────────
   let contractorId = getPending(CTR_ID_KEY);
   if (!contractorId) {
-    contractorId = generateContractorIdCode();
+    contractorId = await allocateNextNumber('contractor') || generateContractorIdCode();
   }
 
   // ── 5. Build and save the User document ───────────────────────────────────

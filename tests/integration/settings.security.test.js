@@ -52,7 +52,7 @@ describe('SETTINGS-01 security', () => {
     await request(app).post('/v1/day-settings').set(headers(admin)).send({ startTime: '09:00', endTime: '18:00' }).expect(httpStatus.CREATED);
     await request(app).get('/v1/seriesConfiguration').set(headers(employee)).expect(httpStatus.FORBIDDEN);
     await request(app).post('/v1/seriesConfiguration').set(headers(admin)).send({
-      seriesName: 'Test', voucherType: 'invoice', prefix: 'T-', suffix: 'X', startingNo: 1, lengthOfZero: 4,
+      seriesName: 'Test', voucherType: 'employee', prefix: 'T-', suffix: 'X', startingNo: 1, lengthOfZero: 4,
     }).expect(httpStatus.CREATED);
   });
 

@@ -14,6 +14,7 @@ const DEPT_CODE_KEY = 'departmentCode';
 const createDepartment = async (body) => {
   const branch = await require('../models').Branch.findOne({ _id: body.branchId, branchStatus: 'active' }).lean();
   if (!branch) throw new ApiError(httpStatus.BAD_REQUEST, 'Active Branch is required');
+  if (body.departmentHead) await validateDepartmentHead(body.departmentHead, body.branchId);
   const duplicate = await Department.findOne({ branchId: body.branchId, $or: [{ departmentCode: body.departmentCode }, { departmentName: { $regex: `^${String(body.departmentName).replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}$`, $options: 'i' } }] }).lean();
   if (duplicate) throw new ApiError(httpStatus.CONFLICT, 'Department already exists in this branch');
   const department = await Department.create(body);
@@ -32,7 +33,12 @@ const createDepartment = async (body) => {
 const queryDepartments = async (filter, options) => {
   const query = { ...filter };
   if (filter.branchId) query.branchId = filter.branchId;
-  if (filter.search) query.$or = [{ departmentName: { $regex: filter.search, $options: 'i' } }, { departmentCode: { $regex: filter.search, $options: 'i' } }];
+  if (filter.search) {
+    const pattern = { $regex: filter.search, $options: 'i' };
+    const heads = await User.find({ name: pattern, isDeleted: { $ne: true } }).select('_id').lean();
+    query.$or = [{ departmentName: pattern }, { departmentCode: pattern }, { departmentHead: { $in: heads.map((head) => head._id) } }];
+    delete query.search;
+  }
   if (filter.isActive !== undefined) query.isActive = filter.isActive;
   const result = await Department.paginate(query, options);
   await Department.populate(result.results, { path: 'departmentHead', select: 'name email employeeId' });
@@ -59,7 +65,7 @@ const updateDepartmentById = async (id, updateBody) => {
   if (!department) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Department not found');
   }
-  if (department.isActive === false) throw new ApiError(httpStatus.BAD_REQUEST, 'Inactive Department cannot receive assignments');
+  if (department.isActive === false && updateBody.isActive !== true) throw new ApiError(httpStatus.BAD_REQUEST, 'Inactive Department cannot receive assignments');
   const branchId = updateBody.branchId || department.branchId;
   const branch = await require('../models').Branch.findOne({ _id: branchId, branchStatus: 'active' }).lean();
   if (!branch) throw new ApiError(httpStatus.BAD_REQUEST, 'Active Branch is required');
@@ -67,10 +73,21 @@ const updateDepartmentById = async (id, updateBody) => {
     const duplicate = await Department.findOne({ _id: { $ne: id }, branchId, $or: [{ departmentCode: updateBody.departmentCode || department.departmentCode }, { departmentName: { $regex: `^${String(updateBody.departmentName || department.departmentName).replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}$`, $options: 'i' } }] }).lean();
     if (duplicate) throw new ApiError(httpStatus.CONFLICT, 'Department already exists in this branch');
   }
+  if (updateBody.departmentHead) await validateDepartmentHead(updateBody.departmentHead, branchId);
   Object.assign(department, updateBody);
+  if (updateBody.isActive === true) department.deactivatedAt = null;
   await department.save();
   return department;
 };
+
+async function validateDepartmentHead(userId, branchId) {
+  const head = await User.findOne({ _id: userId, isDeleted: { $ne: true }, isActive: 'Active' }).select('workInformation.branch').lean();
+  if (!head) throw new ApiError(httpStatus.BAD_REQUEST, 'Department head must be an active user');
+  const headBranch = head.workInformation?.branch;
+  if (branchId && headBranch && String(headBranch) !== String(branchId)) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Department head must belong to the same Branch');
+  }
+}
 
 /**
  * Delete department by id

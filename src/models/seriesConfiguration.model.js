@@ -20,7 +20,7 @@ const seriesConfigurationSchema = new mongoose.Schema(
         suffix:
         {
             type:String,
-            required:true,
+            default:'',
         },
         startingNo:
         {
@@ -31,7 +31,9 @@ const seriesConfigurationSchema = new mongoose.Schema(
         {
             type:Number,
             required:true,
-        }
+        },
+        currentNumber: { type: Number, default: null },
+        hasBeenUsed: { type: Boolean, default: false }
 
     },
     {
