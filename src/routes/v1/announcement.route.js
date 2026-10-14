@@ -32,16 +32,16 @@ router.get('/me/:announcementId', auth(), validate(announcementValidation.getAnn
 // Body: { scheduleDateAndTime: "2026-08-20T09:00:00.000Z" }
 router
   .route('/:announcementId/schedule')
-  .patch(auth('manageAnnouncements'), announcementController.scheduleAnnouncement);
+  .patch(auth({ group: 'standalone', module: 'announcement', action: 'edit' }), announcementController.scheduleAnnouncement);
 
 // ── Image management ─────────────────────────────────────────────────────────
 router
   .route('/:announcementId/images')
-  .post(auth('manageAnnouncements'), cloudinaryUpload('announcements', 'images', 10), validate(announcementValidation.addImages), announcementController.addImages);
+  .post(auth({ group: 'standalone', module: 'announcement', action: 'edit' }), cloudinaryUpload('announcements', 'images', 10), validate(announcementValidation.addImages), announcementController.addImages);
 
 router
   .route('/:announcementId/images/:imgName')
-  .delete(auth('manageAnnouncements'), validate(announcementValidation.removeImage), announcementController.removeImage);
+  .delete(auth({ group: 'standalone', module: 'announcement', action: 'delete' }), validate(announcementValidation.removeImage), announcementController.removeImage);
 
 module.exports = router;
 

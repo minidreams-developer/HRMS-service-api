@@ -113,4 +113,89 @@ describe('SETTINGS-ROLES-01 management', () => {
     await request(app).get('/v1/overtime?limit=1').set(scopedAuth).expect(200);
     await request(app).get('/v1/shifts?page=1&limit=1').set(scopedAuth).expect(200);
   });
+
+  test('reactivating a role restores dynamic access without updating the user', async () => {
+    const auth = headers(admin);
+    const role = await Role.create({
+      name: `Reactivation Role ${Date.now()}`,
+      permissions: [{ group: 'timeHub', modules: [{ module: 'attendance', enabled: true, permissions: permissions(true) }] }],
+    });
+    const scoped = await User.create({ _id: id(), name: 'Reactivation User', email: `reactivation-${Date.now()}@test.com`, password: await bcrypt.hash('password1', 8), role: 'hr_manager', roleId: role._id, isEmailVerified: true });
+    const scopedAuth = headers(scoped);
+
+    await request(app).get('/v1/attendance?page=1&limit=1').set(scopedAuth).expect(200);
+    await request(app).patch(`/v1/roles/${role._id}`).set(auth).send({ isActive: false }).expect(200);
+    await request(app).get('/v1/attendance?page=1&limit=1').set(scopedAuth).expect(403);
+    await request(app).patch(`/v1/roles/${role._id}`).set(auth).send({ isActive: true }).expect(200);
+    await request(app).get('/v1/attendance?page=1&limit=1').set(scopedAuth).expect(200);
+  });
+
+  test('verifies remaining module-specific real route authorization', async () => {
+    const auth = headers(admin);
+    const role = await Role.create({
+      name: `Remaining Modules ${Date.now()}`,
+      permissions: [
+        { group: 'timeHub', modules: [{ module: 'leaderboard', enabled: true, permissions: permissions(true) }, { module: 'attendance', enabled: false, permissions: permissions(true) }] },
+        { group: 'peopleHub', modules: [{ module: 'offBoarding', enabled: true, permissions: permissions(true) }] },
+        { group: 'standalone', modules: [{ module: 'announcement', enabled: true, permissions: permissions(true, true, true, true) }] },
+        { group: 'payHub', modules: [{ module: 'stopPayroll', enabled: true, permissions: permissions(true, false, true) }, { module: 'additionDeductions', enabled: true, permissions: permissions(true, true, true, true) }, { module: 'payroll', enabled: false, permissions: permissions(true) }] },
+      ],
+    });
+    const scoped = await User.create({ _id: id(), name: 'Remaining Modules User', email: `remaining-${Date.now()}@test.com`, password: await bcrypt.hash('password1', 8), role: 'hr_manager', roleId: role._id, isEmailVerified: true });
+    const scopedAuth = headers(scoped);
+    const expectAllowedOrValidation = async (promise) => {
+      const response = await promise;
+      expect(response.status).not.toBe(403);
+    };
+
+    await expectAllowedOrValidation(request(app).get('/v1/leaderboard').set(scopedAuth));
+    await request(app).get('/v1/attendance?page=1&limit=1').set(scopedAuth).expect(403);
+    await expectAllowedOrValidation(request(app).get('/v1/off-board?page=1&limit=1').set(scopedAuth));
+    await expectAllowedOrValidation(request(app).get('/v1/announcements?page=1&limit=1').set(scopedAuth));
+    await expectAllowedOrValidation(request(app).get('/v1/payroll/stop/dashboard').set(scopedAuth));
+    await expectAllowedOrValidation(request(app).get('/v1/payroll/adjustments?page=1&limit=1').set(scopedAuth));
+    await request(app).get('/v1/payroll?page=1&limit=1').set(scopedAuth).expect(403);
+
+    await request(app).patch(`/v1/roles/${role._id}/permissions/timeHub/leaderboard`).set(auth).send({ permissions: permissions(false) }).expect(200);
+    await request(app).get('/v1/leaderboard').set(scopedAuth).expect(403);
+    await request(app).patch(`/v1/roles/${role._id}/permissions/payHub/stopPayroll`).set(auth).send({ permissions: permissions(false, false, false) }).expect(200);
+    await request(app).get('/v1/payroll/stop/dashboard').set(scopedAuth).expect(403);
+    await request(app).patch(`/v1/roles/${role._id}/permissions/payHub/additionDeductions`).set(auth).send({ permissions: permissions(false) }).expect(200);
+    await request(app).get('/v1/payroll/adjustments?page=1&limit=1').set(scopedAuth).expect(403);
+  });
+
+  test('verifies mutation action permissions on real routes', async () => {
+    const auth = headers(admin);
+    const role = await Role.create({
+      name: `Mutation Modules ${Date.now()}`,
+      permissions: [
+        { group: 'standalone', modules: [{ module: 'announcement', enabled: true, permissions: permissions(false, true, true, true) }] },
+        { group: 'payHub', modules: [{ module: 'stopPayroll', enabled: true, permissions: permissions(false, false, true) }, { module: 'additionDeductions', enabled: true, permissions: permissions(false, true, true, true) }] },
+      ],
+    });
+    const scoped = await User.create({ _id: id(), name: 'Mutation Scoped User', email: `mutation-${Date.now()}@test.com`, password: await bcrypt.hash('password1', 8), role: 'hr_manager', roleId: role._id, isEmailVerified: true });
+    const scopedAuth = headers(scoped);
+    const objectId = id().toString();
+    const expectAuthorizedOrBusinessError = async (promise) => {
+      const response = await promise;
+      expect(response.status).not.toBe(403);
+    };
+
+    await expectAuthorizedOrBusinessError(request(app).post('/v1/announcements').set(scopedAuth).send({}));
+    await expectAuthorizedOrBusinessError(request(app).patch(`/v1/announcements/${objectId}`).set(scopedAuth).send({}));
+    await expectAuthorizedOrBusinessError(request(app).delete(`/v1/announcements/${objectId}`).set(scopedAuth));
+    await expectAuthorizedOrBusinessError(request(app).post(`/v1/payroll/${objectId}/stop`).set(scopedAuth).send({}));
+    await expectAuthorizedOrBusinessError(request(app).post(`/v1/payroll/${objectId}/resume`).set(scopedAuth).send({}));
+    await expectAuthorizedOrBusinessError(request(app).post('/v1/payroll/adjustments').set(scopedAuth).send({}));
+    await expectAuthorizedOrBusinessError(request(app).patch(`/v1/payroll/adjustments/${objectId}`).set(scopedAuth).send({}));
+    await expectAuthorizedOrBusinessError(request(app).patch(`/v1/payroll/adjustments/${objectId}/status`).set(scopedAuth).send({}));
+    await expectAuthorizedOrBusinessError(request(app).delete(`/v1/payroll/adjustments/${objectId}`).set(scopedAuth));
+
+    await request(app).patch(`/v1/roles/${role._id}/permissions/standalone/announcement`).set(auth).send({ permissions: permissions(false) }).expect(200);
+    await request(app).post('/v1/announcements').set(scopedAuth).send({}).expect(403);
+    await request(app).patch(`/v1/roles/${role._id}/permissions/payHub/stopPayroll`).set(auth).send({ permissions: permissions(false) }).expect(200);
+    await request(app).post(`/v1/payroll/${objectId}/stop`).set(scopedAuth).send({}).expect(403);
+    await request(app).patch(`/v1/roles/${role._id}/permissions/payHub/additionDeductions`).set(auth).send({ permissions: permissions(false) }).expect(200);
+    await request(app).post('/v1/payroll/adjustments').set(scopedAuth).send({}).expect(403);
+  });
 });

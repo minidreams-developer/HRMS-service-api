@@ -21,29 +21,29 @@ const router = express.Router();
 
 router
   .route('/quick-stats')
-  .get(auth('manageAttendance'), validate(validation.quickStats), adjustmentController.getQuickStats);
+  .get(auth({ group: 'payHub', module: 'additionDeductions' }), validate(validation.quickStats), adjustmentController.getQuickStats);
 
 router
   .route('/pending')
-  .get(auth('manageAttendance'), validate(validation.list), adjustmentController.getPendingAdjustments);
+  .get(auth({ group: 'payHub', module: 'additionDeductions' }), validate(validation.list), adjustmentController.getPendingAdjustments);
 
 router
   .route('/')
-  .post(auth('manageAttendance'), validate(validation.create), adjustmentController.createAdjustment)
-  .get(auth('manageAttendance'), validate(validation.list), adjustmentController.getAdjustments);
+  .post(auth({ group: 'payHub', module: 'additionDeductions' }), validate(validation.create), adjustmentController.createAdjustment)
+  .get(auth({ group: 'payHub', module: 'additionDeductions' }), validate(validation.list), adjustmentController.getAdjustments);
 
 router
   .route('/:adjustmentId/status')
-  .patch(auth('manageAttendance'), validate(validation.status), adjustmentController.updateAdjustmentStatus);
+  .patch(auth({ group: 'payHub', module: 'additionDeductions' }), validate(validation.status), adjustmentController.updateAdjustmentStatus);
 
 router
   .route('/:adjustmentId/emi-schedule')
-  .get(auth('manageAttendance'), validate(validation.id), adjustmentController.getEmiSchedule);
+  .get(auth({ group: 'payHub', module: 'additionDeductions' }), validate(validation.id), adjustmentController.getEmiSchedule);
 
 router
   .route('/:adjustmentId')
-  .get(auth('manageAttendance'), validate(validation.id), adjustmentController.getAdjustment)
-  .patch(auth('manageAttendance'), validate(validation.update), adjustmentController.updateAdjustment)
-  .delete(auth('manageAttendance'), validate(validation.id), adjustmentController.deleteAdjustment);
+  .get(auth({ group: 'payHub', module: 'additionDeductions' }), validate(validation.id), adjustmentController.getAdjustment)
+  .patch(auth({ group: 'payHub', module: 'additionDeductions' }), validate(validation.update), adjustmentController.updateAdjustment)
+  .delete(auth({ group: 'payHub', module: 'additionDeductions' }), validate(validation.id), adjustmentController.deleteAdjustment);
 
 module.exports = router;

@@ -55,13 +55,13 @@ router
 
 router
   .route('/stopped')
-  .get(auth('manageAttendance'), validate(payrollValidation.getStoppedPayrolls), payrollController.getStoppedPayrolls);
+  .get(auth({ group: 'payHub', module: 'stopPayroll' }), validate(payrollValidation.getStoppedPayrolls), payrollController.getStoppedPayrolls);
 
-router.route('/stop/quick-stats').get(auth('manageAttendance'), validate(payrollValidation.getStopPayrollDashboard), payrollController.getStopPayrollQuickStats);
-router.route('/stop/list').get(auth('manageAttendance'), validate(payrollValidation.getStopPayrollDashboard), payrollController.getStopPayrollList);
-router.route('/stop/dashboard').get(auth('manageAttendance'), validate(payrollValidation.getStopPayrollDashboard), payrollController.getStopPayrollDashboard);
+router.route('/stop/quick-stats').get(auth({ group: 'payHub', module: 'stopPayroll' }), validate(payrollValidation.getStopPayrollDashboard), payrollController.getStopPayrollQuickStats);
+router.route('/stop/list').get(auth({ group: 'payHub', module: 'stopPayroll' }), validate(payrollValidation.getStopPayrollDashboard), payrollController.getStopPayrollList);
+router.route('/stop/dashboard').get(auth({ group: 'payHub', module: 'stopPayroll' }), validate(payrollValidation.getStopPayrollDashboard), payrollController.getStopPayrollDashboard);
 
-router.route('/:employeeId/stop-detail').get(auth('manageAttendance'), validate(payrollValidation.getStopPayrollDetail), payrollController.getStopPayrollDetail);
+router.route('/:employeeId/stop-detail').get(auth({ group: 'payHub', module: 'stopPayroll' }), validate(payrollValidation.getStopPayrollDetail), payrollController.getStopPayrollDetail);
 
 router
   .route('/me')
@@ -93,11 +93,11 @@ router
 
 router
   .route('/:employeeId/stop')
-  .post(auth('manageAttendance'), validate(payrollValidation.stopPayroll), payrollController.stopPayroll);
+  .post(auth({ group: 'payHub', module: 'stopPayroll', action: 'edit' }), validate(payrollValidation.stopPayroll), payrollController.stopPayroll);
 
 router
   .route('/:employeeId/resume')
-  .post(auth('manageAttendance'), validate(payrollValidation.resumePayroll), payrollController.resumePayroll);
+  .post(auth({ group: 'payHub', module: 'stopPayroll', action: 'edit' }), validate(payrollValidation.resumePayroll), payrollController.resumePayroll);
 
 router
   .route('/:employeeId')
