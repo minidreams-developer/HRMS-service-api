@@ -41,6 +41,10 @@ router
   .get(auth('manageAttendance'), validate(paysheetValidation.getPayrollBreakdown), paysheetController.getPayrollBreakdown);
 
 router
+  .route('/attendance-overview')
+  .get(auth('manageAttendance'), validate(paysheetValidation.getAttendanceOverview), paysheetController.getAttendanceOverview);
+
+router
   .route('/generate')
   .post(auth('manageAttendance'), validate(paysheetValidation.generatePaysheet), paysheetController.generatePaysheet);
 

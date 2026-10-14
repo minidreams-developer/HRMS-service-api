@@ -33,6 +33,13 @@ const getPayrollBreakdown = {
   }),
 };
 
+const getAttendanceOverview = {
+  query: Joi.object().keys({
+    month: Joi.number().integer().min(1).max(12).optional(),
+    year: Joi.number().integer().min(2000).max(2100).optional(),
+  }),
+};
+
 const generatePaysheet = {
   body: Joi.object().keys({
     month:          Joi.number().integer().min(1).max(12).required(),
@@ -84,6 +91,7 @@ module.exports = {
   getQuickStats,
   getPayrollOverview,
   getPayrollBreakdown,
+  getAttendanceOverview,
   generatePaysheet,
   refreshPaysheet,
   getPayrollList,

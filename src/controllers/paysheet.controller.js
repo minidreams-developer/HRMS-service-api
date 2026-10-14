@@ -49,6 +49,10 @@ const getPayrollBreakdown = catchAsync(async (req, res) => {
   res.send(result);
 });
 
+const getAttendanceOverview = catchAsync(async (req, res) => {
+  res.send(await paysheetService.getAttendanceOverview(req.query.month, req.query.year));
+});
+
 /**
  * POST /v1/paysheets/generate
  * Generate/refresh paysheet data for a specific month/year
@@ -107,6 +111,7 @@ module.exports = {
   getQuickStats,
   getPayrollOverview,
   getPayrollBreakdown,
+  getAttendanceOverview,
   generatePaysheet,
   refreshPaysheet,
   getPayrollList,

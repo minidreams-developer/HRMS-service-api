@@ -1,6 +1,6 @@
 const httpStatus = require('http-status');
 const mongoose = require('mongoose');
-const { User, Payroll, Paysheet } = require('../models');
+const { User, Payroll, Paysheet, Attendance, LeaveRequests, ContractorSettlement } = require('../models');
 const payrollService = require('./payroll.service');
 const ApiError = require('../utils/ApiError');
 
@@ -61,7 +61,7 @@ const computeQuickStats = async (month, year, organizationId = null) => {
         totalIncentives: { $sum: { $add: ['$extras', '$otherWages'] } },
         totalDeductions: { $sum: { $add: ['$penalties', '$loanAndAdvance', '$otherDeductions'] } },
         payableEmployees: { $sum: { $cond: [{ $eq: ['$status', 'processed'] }, 1, 0] } },
-        onHoldEmployees: { $sum: { $cond: [{ $eq: ['$status', 'stopped'] }, 1, 0] } },
+        onHoldEmployees: { $sum: 0 },
       }
     }
   ]);
@@ -85,13 +85,17 @@ const computeQuickStats = async (month, year, organizationId = null) => {
         totalIncentives: { $sum: { $add: ['$extras', '$otherWages'] } },
         totalDeductions: { $sum: { $add: ['$penalties', '$loanAndAdvance', '$otherDeductions'] } },
         payableEmployees: { $sum: { $cond: [{ $eq: ['$status', 'processed'] }, 1, 0] } },
-        onHoldEmployees: { $sum: { $cond: [{ $eq: ['$status', 'stopped'] }, 1, 0] } },
+        onHoldEmployees: { $sum: 0 },
       }
     }
   ]);
 
   const current = currentStats[0] || {};
   const previous = previousStats[0] || {};
+  const [currentHold, previousHold] = await Promise.all([
+    Payroll.countDocuments({ ...buildMatchStage(currentMonth), status: 'stopped' }),
+    Payroll.countDocuments({ ...buildMatchStage(previousMonth), status: 'stopped' }),
+  ]);
 
   return {
     totalSalary: {
@@ -111,8 +115,8 @@ const computeQuickStats = async (month, year, organizationId = null) => {
       percentageChange: calculatePercentageChange(current.payableEmployees || 0, previous.payableEmployees || 0)
     },
     onHoldEmployees: {
-      count: current.onHoldEmployees || 0,
-      percentageChange: calculatePercentageChange(current.onHoldEmployees || 0, previous.onHoldEmployees || 0)
+      count: currentHold,
+      percentageChange: calculatePercentageChange(currentHold, previousHold)
     }
   };
 };
@@ -212,6 +216,9 @@ const computePayrollBreakdown = async (month, year, organizationId = null) => {
   ]);
 
   const data = breakdown[0] || {};
+  const contractorFilter = { month, year, status: { $in: ['processed', 'paid'] } };
+  const contractorRows = await ContractorSettlement.find(contractorFilter).select('totalShare').lean();
+  const contractorAmount = contractorRows.reduce((sum, row) => sum + (Number(row.totalShare) || 0), 0);
   
   // Calculate totals
   const totalEarnings = (data.salary || 0) + (data.allowances || 0) + (data.incentives || 0) + (data.overtime || 0) + (data.otherWages || 0);
@@ -243,8 +250,35 @@ const computePayrollBreakdown = async (month, year, organizationId = null) => {
         amount: data.overtime || 0,
         percentage: calculatePercentage(data.overtime || 0)
       }
+      ,contractors: { amount: Number(contractorAmount.toFixed(2)), percentage: calculatePercentage(contractorAmount) },
+      agentsCommission: { amount: null, percentage: null, payoutAvailable: false },
     }
   };
+};
+
+const getAttendanceOverview = async (month, year) => {
+  month = parseInt(month, 10) || new Date().getUTCMonth() + 1;
+  year = parseInt(year, 10) || new Date().getUTCFullYear();
+  const { start, end } = getMonthRange(month, year);
+  const [attendance, approvedLeave] = await Promise.all([
+    Attendance.find({ date: { $gte: start, $lte: end } }).select('date attendanceCategory timingStatus').lean(),
+    LeaveRequests.find({ status: 'approved', $or: [{ singleDate: { $gte: start, $lte: end } }, { startDate: { $lte: end }, endDate: { $gte: start } }] }).select('singleDate startDate endDate').lean(),
+  ]);
+  const days = new Map();
+  const keyFor = (date) => new Date(date).toISOString().slice(0, 10);
+  attendance.forEach((row) => {
+    const key = keyFor(row.date); const item = days.get(key) || { date: key, present: 0, onLeave: 0, late: 0 };
+    if (['fullDay', 'halfDay'].includes(row.attendanceCategory)) item.present += 1;
+    if (row.timingStatus === 'arrivedLate') item.late += 1;
+    days.set(key, item);
+  });
+  approvedLeave.forEach((leave) => {
+    const from = new Date(leave.singleDate || leave.startDate || start); const to = new Date(leave.singleDate || leave.endDate || from);
+    for (let date = new Date(Math.max(from.getTime(), start.getTime())); date <= Math.min(to.getTime(), end.getTime()); date.setUTCDate(date.getUTCDate() + 1)) {
+      const key = keyFor(date); const item = days.get(key) || { date: key, present: 0, onLeave: 0, late: 0 }; item.onLeave += 1; days.set(key, item);
+    }
+  });
+  return { period: { month, year }, results: [...days.values()].sort((a, b) => a.date.localeCompare(b.date)) };
 };
 
 /**
@@ -627,6 +661,7 @@ module.exports = {
   getQuickStats,
   getPayrollOverview,
   getPayrollBreakdown,
+  getAttendanceOverview,
   generatePaysheet,
   refreshPaysheet,
   getPayrollList,
