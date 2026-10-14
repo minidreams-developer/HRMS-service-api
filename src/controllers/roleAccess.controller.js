@@ -9,8 +9,13 @@ const { roleAccessService } = require('../services');
  * Create a new role. Permissions default to all-false if omitted.
  */
 const createRole = catchAsync(async (req, res) => {
-  const role = await roleAccessService.createRole(req.body);
+  const role = await roleAccessService.createRole(req.body, req.user.id);
   res.status(httpStatus.CREATED).send(role);
+});
+
+const generateRoleId = catchAsync(async (req, res) => {
+  const reservation = await roleAccessService.generateRoleIdReservation(req.user.id);
+  res.status(httpStatus.OK).send(reservation);
 });
 
 /**
@@ -103,6 +108,7 @@ const cloneRole = catchAsync(async (req, res) => {
 
 module.exports = {
   createRole,
+  generateRoleId,
   getRoles,
   getRole,
   updateRole,

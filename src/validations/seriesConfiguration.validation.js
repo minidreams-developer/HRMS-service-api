@@ -3,7 +3,7 @@ const { objectId } = require('./custom.validation');
 
 const bodyFields = {
   seriesName: Joi.string().trim().min(1),
-  voucherType: Joi.string().valid('employee', 'staff', 'agent', 'contractor').required(),
+  voucherType: Joi.string().valid('employee', 'staff', 'agent', 'contractor', 'role').required(),
   prefix: Joi.string().trim().allow(''),
   suffix: Joi.string().trim().allow(''),
   startingNo: Joi.number().integer().min(1),
@@ -20,7 +20,7 @@ module.exports = {
   },
   update: {
     params: Joi.object({ seriesId: Joi.string().custom(objectId).required() }),
-    body: Joi.object({ ...bodyFields, voucherType: Joi.string().valid('employee', 'staff', 'agent', 'contractor') }).min(1),
+  body: Joi.object({ ...bodyFields, voucherType: Joi.string().valid('employee', 'staff', 'agent', 'contractor', 'role') }).min(1),
   },
   get: {
     params: Joi.object({ seriesId: Joi.string().custom(objectId).required() }),

@@ -5,6 +5,10 @@ const createRole = {
   body: Joi.object().unknown(true),
 };
 
+const generateRoleId = {
+  query: Joi.object().keys({}),
+};
+
 const getRoles = {
   query: Joi.object().keys({
     name:         Joi.string(),
@@ -71,6 +75,7 @@ const cloneRole = {
 
 module.exports = {
   createRole,
+  generateRoleId,
   getRoles,
   getRole,
   updateRole,

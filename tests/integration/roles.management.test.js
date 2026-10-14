@@ -4,7 +4,7 @@ const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const app = require('../../src/app');
 const setupTestDB = require('../utils/setupTestDB');
-const { User, Role } = require('../../src/models');
+const { User, Role, SeriesConfiguration, RoleIdReservation } = require('../../src/models');
 const tokenService = require('../../src/services/token.service');
 const { tokenTypes } = require('../../src/config/tokens');
 
@@ -197,5 +197,60 @@ describe('SETTINGS-ROLES-01 management', () => {
     await request(app).post(`/v1/payroll/${objectId}/stop`).set(scopedAuth).send({}).expect(403);
     await request(app).patch(`/v1/roles/${role._id}/permissions/payHub/additionDeductions`).set(auth).send({ permissions: permissions(false) }).expect(200);
     await request(app).post('/v1/payroll/adjustments').set(scopedAuth).send({}).expect(403);
+  });
+
+  test('generates immutable sequential Role IDs through the configured series', async () => {
+    const auth = headers(admin);
+    const created = await request(app).post('/v1/roles').set(auth).send({ name: `Series Role ${Date.now()}` }).expect(201);
+    expect(created.body.roleId).toBe('ROLE0001');
+    const roleMongoId = created.body.id || created.body._id;
+    await request(app).patch(`/v1/roles/${roleMongoId}`).set(auth).send({ roleId: 'ROLE9999' }).expect(400);
+    expect((await request(app).get(`/v1/roles/${roleMongoId}`).set(auth)).body.roleId).toBe('ROLE0001');
+    expect((await request(app).get('/v1/roles?search=ROLE0001').set(auth)).body.results).toHaveLength(1);
+
+    const clone = await request(app).post(`/v1/roles/${roleMongoId}/clone`).set(auth).send({ newName: `Cloned Series Role ${Date.now()}` }).expect(201);
+    expect(clone.body.roleId).toBe('ROLE0002');
+
+    const concurrent = await Promise.all(Array.from({ length: 10 }, (_, index) => request(app).post('/v1/roles').set(auth).send({ name: `Concurrent Role ${Date.now()}-${index}` })));
+    expect(concurrent.every((response) => response.status === 201)).toBe(true);
+    const ids = concurrent.map((response) => response.body.roleId);
+    expect(new Set(ids).size).toBe(10);
+    expect((await SeriesConfiguration.findOne({ voucherType: 'role' })).currentNumber).toBe(12);
+  });
+
+  test('reserves Role ID for creation and rejects reuse or expiry', async () => {
+    const auth = headers(admin);
+    const preview = await request(app).get('/v1/roles/generate-id').set(auth).expect(200);
+    expect(preview.body.roleId).toBe('ROLE0001');
+    expect(preview.body.reservationToken).toEqual(expect.any(String));
+
+    const created = await request(app).post('/v1/roles').set(auth).send({
+      reservationToken: preview.body.reservationToken,
+      name: `Reserved Role ${Date.now()}`,
+    }).expect(201);
+    expect(created.body.roleId).toBe('ROLE0001');
+    expect((await SeriesConfiguration.findOne({ voucherType: 'role' })).currentNumber).toBe(1);
+    expect((await RoleIdReservation.findOne({ roleId: 'ROLE0001' })).status).toBe('consumed');
+
+    await request(app).post('/v1/roles').set(auth).send({
+      reservationToken: preview.body.reservationToken,
+      name: `Reused Reserved Role ${Date.now()}`,
+    }).expect(400);
+
+    const expiredPreview = await request(app).get('/v1/roles/generate-id').set(auth).expect(200);
+    await RoleIdReservation.updateOne({ reservationTokenHash: require('crypto').createHash('sha256').update(expiredPreview.body.reservationToken).digest('hex') }, { $set: { expiresAt: new Date(Date.now() - 1000) } });
+    await request(app).post('/v1/roles').set(auth).send({
+      reservationToken: expiredPreview.body.reservationToken,
+      name: `Expired Reserved Role ${Date.now()}`,
+    }).expect(400);
+  });
+
+  test('allocates unique IDs for concurrent reservations and keeps direct create compatible', async () => {
+    const auth = headers(admin);
+    const previews = await Promise.all(Array.from({ length: 10 }, () => request(app).get('/v1/roles/generate-id').set(auth)));
+    expect(previews.every((response) => response.status === 200)).toBe(true);
+    expect(new Set(previews.map((response) => response.body.roleId)).size).toBe(10);
+    const direct = await request(app).post('/v1/roles').set(auth).send({ name: `Direct Role ${Date.now()}` }).expect(201);
+    expect(direct.body.roleId).toBe('ROLE0011');
   });
 });

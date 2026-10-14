@@ -7,6 +7,10 @@ const settingsAdmin = require('../../middlewares/settingsAdmin');
 
 const router = express.Router();
 
+router
+  .route('/generate-id')
+  .get(auth(), settingsAdmin, validate(roleAccessValidation.generateRoleId), roleAccessController.generateRoleId);
+
 // ── Collection ──────────────────────────────────────────────────────────────
 router
   .route('/')

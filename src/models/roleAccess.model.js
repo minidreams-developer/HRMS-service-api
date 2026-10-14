@@ -95,6 +95,8 @@ const roleSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+roleSchema.index({ roleId: 1 }, { unique: true, partialFilterExpression: { roleId: { $type: 'string' } } });
+
 /**
  * Builds the default permissions structure with all groups and modules
  * set to disabled — ready to be toggled by the admin.

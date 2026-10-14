@@ -1,7 +1,23 @@
 const httpStatus = require('http-status');
+const crypto = require('crypto');
 const { Role } = require('../models');
+const RoleIdReservation = require('../models/roleIdReservation.model');
 const { buildDefaultPermissions } = require('../models/roleAccess.model');
 const ApiError = require('../utils/ApiError');
+const { allocateNextNumber } = require('./seriesConfiguration.service');
+
+const ROLE_RESERVATION_MINUTES = 20;
+
+const hashReservationToken = (token) => crypto.createHash('sha256').update(token).digest('hex');
+
+const generateRoleIdReservation = async (reservedBy) => {
+  const roleId = await allocateNextNumber('role');
+  if (!roleId) throw new ApiError(httpStatus.BAD_REQUEST, 'Role Series Configuration is not configured');
+  const reservationToken = crypto.randomBytes(32).toString('hex');
+  const expiresAt = new Date(Date.now() + ROLE_RESERVATION_MINUTES * 60 * 1000);
+  await RoleIdReservation.create({ roleId, reservationTokenHash: hashReservationToken(reservationToken), reservedBy, expiresAt });
+  return { roleId, reservationToken, expiresAt };
+};
 
 /**
  * Create a role.
@@ -9,12 +25,36 @@ const ApiError = require('../utils/ApiError');
  * @param {Object} roleBody
  * @returns {Promise<Role>}
  */
-const createRole = async (roleBody) => {
+const createRole = async (roleBody, reservedBy) => {
+  if (roleBody.roleId !== undefined) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'roleId is generated automatically');
+  }
   const exists = await Role.findOne({ name: roleBody.name });
   if (exists) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Role name already exists');
   }
-  return Role.create(roleBody);
+  let roleId;
+  let reservation;
+  if (roleBody.reservationToken) {
+    reservation = await RoleIdReservation.findOne({
+      reservationTokenHash: hashReservationToken(roleBody.reservationToken),
+      reservedBy,
+      status: 'reserved',
+    });
+    if (!reservation) throw new ApiError(httpStatus.BAD_REQUEST, 'Invalid, expired, or already used reservationToken');
+    if (reservation.expiresAt <= new Date()) {
+      await RoleIdReservation.updateOne({ _id: reservation._id }, { $set: { status: 'expired' } });
+      throw new ApiError(httpStatus.BAD_REQUEST, 'Role ID reservation has expired');
+    }
+    roleId = reservation.roleId;
+  } else {
+    roleId = await allocateNextNumber('role');
+    if (!roleId) throw new ApiError(httpStatus.BAD_REQUEST, 'Role Series Configuration is not configured');
+  }
+  const { reservationToken, ...roleData } = roleBody;
+  const role = await Role.create({ ...roleData, roleId });
+  if (reservation) await RoleIdReservation.updateOne({ _id: reservation._id, status: 'reserved' }, { $set: { status: 'consumed', consumedAt: new Date() } });
+  return role;
 };
 
 /**
@@ -68,6 +108,9 @@ const updateRoleById = async (roleId, updateBody) => {
 
   if (updateBody.isSystemRole !== undefined && updateBody.isSystemRole !== role.isSystemRole) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Cannot change system role status');
+  }
+  if (updateBody.roleId !== undefined && updateBody.roleId !== role.roleId) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'roleId cannot be changed');
   }
 
   if (updateBody.name && updateBody.name !== role.name) {
@@ -213,12 +256,14 @@ const cloneRole = async (roleId, newName) => {
     isDefault: false,
     isActive: true,
     permissions: source.permissions,
+    roleId: await allocateNextNumber('role'),
   });
 
   return clone;
 };
 
 module.exports = {
+  generateRoleIdReservation,
   createRole,
   queryRoles,
   getRoleById,

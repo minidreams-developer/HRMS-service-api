@@ -35,3 +35,5 @@ module.exports.Paysheet = require('./paysheet.model');
 module.exports.Roster = require('./roster.model');
 module.exports.Commission = require('./commission.model');
 module.exports.Designation = require('./designation.model');
+module.exports.SeriesConfiguration = require('./seriesConfiguration.model');
+module.exports.RoleIdReservation = require('./roleIdReservation.model');
