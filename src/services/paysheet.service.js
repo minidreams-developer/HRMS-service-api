@@ -474,7 +474,7 @@ const getPayrollList = async (query, options) => {
                     $cond: {
                       if: { $eq: [{ $type: '$$deptId' }, 'objectId'] },
                       then: '$$deptId',
-                      else: { $toObjectId: { $ifNull: ['$$deptId', '000000000000000000000000'] } },
+                      else: { $convert: { input: '$$deptId', to: 'objectId', onError: null, onNull: null } },
                     },
                   },
                 ],
@@ -588,7 +588,7 @@ const getPayrollDetail = async (payrollId) => {
                     $cond: {
                       if: { $eq: [{ $type: '$$deptId' }, 'objectId'] },
                       then: '$$deptId',
-                      else: { $toObjectId: { $ifNull: ['$$deptId', '000000000000000000000000'] } },
+                      else: { $convert: { input: '$$deptId', to: 'objectId', onError: null, onNull: null } },
                     },
                   },
                 ],
