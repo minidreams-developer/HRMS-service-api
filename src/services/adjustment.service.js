@@ -296,6 +296,9 @@ const updateAdjustmentById = async (id, updateBody) => {
 const deleteAdjustmentById = async (id) => {
   const adj = await Adjustment.findById(id);
   if (!adj) throw new ApiError(httpStatus.NOT_FOUND, 'Adjustment not found');
+  if (adj.status === 'applied') {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Applied adjustment cannot be deleted');
+  }
   await adj.deleteOne();
   return adj;
 };
