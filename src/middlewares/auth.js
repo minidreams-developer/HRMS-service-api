@@ -5,6 +5,18 @@ const { roleRights } = require('../config/roles');
 const dynamicPermissions = require('../config/dynamicPermissions');
 const { Role } = require('../models');
 
+const permissionGroupAliases = {
+  standalone: ['standalone'],
+  dashboard: ['dashboard'],
+  announcement: ['announcement'],
+};
+
+const groupMatches = (storedGroup, requestedGroup, requestedModule) => {
+  if (storedGroup === requestedGroup) return true;
+  if (requestedGroup === 'standalone' && permissionGroupAliases[requestedModule]?.includes(storedGroup)) return true;
+  return false;
+};
+
 const hasDynamicPermission = async (user, requiredRight) => {
   const configured = typeof requiredRight === 'string' ? dynamicPermissions[requiredRight] : requiredRight;
   const mapping = configured && !configured.action && !configured.actions
@@ -12,8 +24,10 @@ const hasDynamicPermission = async (user, requiredRight) => {
     : configured;
   if (!mapping || !user.roleId) return false;
   const role = await Role.findOne({ _id: user.roleId, isActive: true }).select('permissions').lean();
-  const group = role?.permissions?.find((item) => item.group === mapping.group);
-  const module = group?.modules?.find((item) => item.module === mapping.module);
+  const module = (role?.permissions || [])
+    .filter((item) => groupMatches(item.group, mapping.group, mapping.module))
+    .flatMap((item) => item.modules || [])
+    .find((item) => item.module === mapping.module);
   if (!module || module.enabled === false) return false;
   if (mapping.action) return module.permissions?.[mapping.action] === true;
   return mapping.actions.some((action) => module.permissions?.[action] === true);
@@ -32,9 +46,10 @@ const verifyCallback = (req, resolve, reject, requiredRights, dynamicContext) =>
         userRights.includes(requiredRight) || hasDynamicPermission(user, requiredRight)
       ))).then((results) => results.every(Boolean))
       : false;
-    const hasContextPermission = dynamicContext
-      ? await hasDynamicPermission(user, { ...dynamicContext, requestMethod: req.method })
-      : false;
+    const hasContextPermission = ['admin', 'subAdmin'].includes(user.role)
+      || (dynamicContext
+        ? await hasDynamicPermission(user, { ...dynamicContext, requestMethod: req.method })
+        : false);
     if (!hasRequiredRights && !hasContextPermission && req.params.userId !== user.id) {
       return reject(new ApiError(httpStatus.FORBIDDEN, 'Forbidden'));
     }

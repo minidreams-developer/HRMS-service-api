@@ -62,6 +62,7 @@ describe('SETTINGS-DEPARTMENT-03 management flow', () => {
     expect(reactivated.body.departmentName).toBe('QA Engineering');
 
     await request(app).patch(`/v1/departments/${department.id}`).set(auth).send({ isActive: false }).expect(200);
+    await request(app).patch(`/v1/departments/${department.id}`).set(auth).send({ departmentDescription: 'Updated while inactive' }).expect(200);
     await request(app).patch(`/v1/departments/${department.id}`).set(auth).send({ isActive: true }).expect(200);
     expect((await request(app).get('/v1/departments?isActive=true').set(auth)).body.results.some((item) => item.id === department.id)).toBe(true);
   });

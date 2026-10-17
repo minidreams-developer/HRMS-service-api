@@ -65,7 +65,6 @@ const updateDepartmentById = async (id, updateBody) => {
   if (!department) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Department not found');
   }
-  if (department.isActive === false && updateBody.isActive !== true) throw new ApiError(httpStatus.BAD_REQUEST, 'Inactive Department cannot receive assignments');
   const branchId = updateBody.branchId || department.branchId;
   const branch = await require('../models').Branch.findOne({ _id: branchId, branchStatus: 'active' }).lean();
   if (!branch) throw new ApiError(httpStatus.BAD_REQUEST, 'Active Branch is required');

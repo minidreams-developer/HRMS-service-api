@@ -4,7 +4,7 @@ const { toJSON, paginate } = require('./plugins');
 /**
  * Adjustment model — captures Additions and Deductions applied to employee payroll.
  *
- * forWhom:     "person" = single employee  |  "team" = all members of a team
+ * forWhom:     "individual" = single employee  |  "team" = all members of a team
  * type:        "addition" | "deduction"
  * component:   Bonus | Incentive | Advance | Penalty | EMI | Other
  *
@@ -24,7 +24,7 @@ const adjustmentSchema = new mongoose.Schema(
       required: true,
     },
 
-    // Single employee ref (used when forWhom = "person")
+    // Single employee ref (used when forWhom = "individual")
     employeeId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',

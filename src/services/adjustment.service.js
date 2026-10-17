@@ -156,9 +156,9 @@ const createAdjustment = async (body, createdById) => {
 
     const records = members.map((memberId) => ({
       ...data,
-      forWhom: 'person',
+      forWhom: 'individual',
       employeeId: memberId,
-      teamId: body.teamId,
+      teamId: team._id,
       departmentId: body.departmentId || team.department,
     }));
 
@@ -198,7 +198,7 @@ const queryAdjustments = async (query, options) => {
 
   const result = await Adjustment.paginate(filter, {
     ...options,
-    populate: 'employeeId,teamId,departmentId,createdBy',
+    populate: 'employeeId,teamId,teamId.teamLead,departmentId,createdBy',
     sort: options.sortBy || '-createdAt',
   });
 

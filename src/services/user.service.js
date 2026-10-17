@@ -1,5 +1,5 @@
 const httpStatus = require('http-status');
-const { User, Role, Attendance, Asset, Address, BankDetails, SalaryDetails, Commission, Shift, ShiftAssignment, Branch, Department, Team, Designation } = require('../models');
+const { User, Role, Attendance, Asset, Address, BankDetails, SalaryDetails, Commission, Shift, ShiftAssignment, Branch, Department, Team, Designation, Payroll } = require('../models');
 const EmergencyContact = require('../models/emergencyContact.model');
 const UserDocument = require('../models/userDocuments.model');
 const ApiError = require('../utils/ApiError');
@@ -599,6 +599,31 @@ const getUserByEmployeeId = async (employeeId) => {
     user._doc.assets = await Asset.find({ assignedTo: user._id })
       .populate('assignedTo', 'name employeeId email')
       .sort({ issuedDate: -1, createdAt: -1 });
+
+    // Current payroll record of the user
+    try {
+      const now = new Date();
+      const currentMonth = now.getMonth() + 1;
+      const currentYear = now.getFullYear();
+
+      const payrollRecord = await Payroll.findOne({
+        employeeId: user._id,
+        month: currentMonth,
+        year: currentYear,
+      }).lean() || await Payroll.findOne({
+        employeeId: user._id,
+      }).sort({ year: -1, month: -1 }).lean();
+
+      user._doc.currentPayroll = payrollRecord || null;
+      user._doc.payroll = payrollRecord || null;
+      user.currentPayroll = payrollRecord || null;
+      user.payroll = payrollRecord || null;
+    } catch (err) {
+      user._doc.currentPayroll = null;
+      user._doc.payroll = null;
+      user.currentPayroll = null;
+      user.payroll = null;
+    }
   }
   return user;
 };

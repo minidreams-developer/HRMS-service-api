@@ -3,6 +3,7 @@ const pick = require('../utils/pick');
 const ApiError = require('../utils/ApiError');
 const catchAsync = require('../utils/catchAsync');
 const { userService } = require('../services');
+const { payrollService } = require('../services');
 
 const registerEmployee = catchAsync(async (req, res) => {
   console.log('[registerEmployee] req.body:', JSON.stringify(req.body, null, 2));

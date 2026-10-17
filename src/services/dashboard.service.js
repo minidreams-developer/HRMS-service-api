@@ -1,7 +1,6 @@
 const mongoose = require('mongoose');
 const { User, Attendance, LeaveRequests, Overtime, Payroll, Branch, Department, Team } = require('../models');
 const ApiError = require('../utils/ApiError');
-const managementRoles = new Set(['admin', 'subAdmin', 'manager', 'hr_manager']);
 const workforceRoles = ['employee', 'staff', 'agent', 'manager', 'hr_manager', 'team_lead'];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -94,7 +93,6 @@ const refId = (value) => value && typeof value === 'object' ? (value._id || valu
 const validId = (value) => mongoose.Types.ObjectId.isValid(value);
 
 const resolveDashboardFilters = async (actor, requested = {}) => {
-  if (!managementRoles.has(actor.role)) throw new ApiError(403, 'Forbidden');
   const filters = { ...requested };
   const managerBranch = refId(actor.workInformation?.branch);
   if (actor.role === 'manager') {

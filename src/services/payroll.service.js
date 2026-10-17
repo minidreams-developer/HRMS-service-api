@@ -245,10 +245,10 @@ const computePayrollForEmployee = async (employee, month, year, payrollOverride 
  */
 const getPayrollList = async (query, options) => {
   const month = parseInt(query.month, 10) || new Date().getMonth() + 1;
-  const year  = parseInt(query.year,  10) || new Date().getFullYear();
+  const year = parseInt(query.year, 10) || new Date().getFullYear();
   const limit = parseInt(options.limit, 10) > 0 ? parseInt(options.limit, 10) : 10;
-  const page  = parseInt(options.page,  10) > 0 ? parseInt(options.page,  10) : 1;
-  const skip  = (page - 1) * limit;
+  const page = parseInt(options.page, 10) > 0 ? parseInt(options.page, 10) : 1;
+  const skip = (page - 1) * limit;
 
   if (query.role === 'contractor') return getContractorAbstractList(query, { page, limit });
   if (query.role === 'agent') return getAgentAbstractList(query, { page, limit });
@@ -996,7 +996,22 @@ const getStoppedPayrolls = async (query, options) => {
 
 const getStopPayrollList = async (query = {}, options = {}) => {
   const page = Math.max(Number(options.page) || 1, 1); const limit = Math.min(Math.max(Number(options.limit) || 10, 1), 100);
-  const filter = { status: query.status || { $in: ['stopped', 'resumed', 'processed', 'paid'] } };
+  // A payroll belongs in Stop Payroll only when it is currently stopped or has
+  // persisted stop history. This preserves resumed/processed/paid records that
+  // were previously stopped while excluding ordinary payroll rows.
+  const filter = {
+    status: query.status || { $in: ['stopped', 'resumed', 'processed', 'paid'] },
+    $or: [
+      { status: 'stopped' },
+      { 'stopDetails.stopType': { $exists: true, $nin: [null, ''] } },
+      { 'stopDetails.reason': { $exists: true, $nin: [null, ''] } },
+      { 'stopDetails.effectiveFrom': { $exists: true, $ne: null } },
+      { 'stopDetails.impactMonth': { $exists: true, $nin: [null, ''] } },
+      { 'stopDetails.resumedAt': { $exists: true, $ne: null } },
+      { 'stopDetails.resumeReason': { $exists: true, $nin: [null, ''] } },
+      { 'stopDetails.resumeRemarks': { $exists: true, $nin: [null, ''] } },
+    ],
+  };
   if (query.month) filter.month = Number(query.month); if (query.year) filter.year = Number(query.year);
   const payrolls = await Payroll.find(filter).populate('employeeId', 'name employeeId role profilePic workInformation').sort({ updatedAt: -1 }).lean();
   const refValue = (value) => (value && typeof value === 'object' && value._id ? value._id : value);
@@ -1015,9 +1030,24 @@ const getStopPayrollList = async (query = {}, options = {}) => {
       const department = refValue(snapshot.department || employee.workInformation?.department);
       if (String(department) !== String(query.departmentId)) return false;
     }
+    if (query.shiftId) {
+      const shift = refValue(snapshot.shiftId || employee.workInformation?.shiftId);
+      if (String(shift) !== String(query.shiftId)) return false;
+    }
     return !search || `${employee.name || snapshot.name || ''} ${employee.employeeId || snapshot.employeeCode || ''}`.toLowerCase().includes(search);
   }).map((payroll) => {
     const employee = payroll.employeeId || {}; const snapshot = payroll.snapshot?.employee || {}; const released = ['resumed', 'processed', 'paid'].includes(payroll.status) && payroll.stopDetails?.resumedAt;
+    const payrollSnapshot = payroll.snapshot || {};
+    const fullDays = Number(payrollSnapshot.fullDays || 0);
+    const halfDays = Number(payrollSnapshot.halfDays || 0);
+    const grossEarnings = Number(payrollSnapshot.grossEarnings || 0);
+    const takeHome = Number(payrollSnapshot.takeHome ?? payroll.totalPayableAmount ?? 0);
+    const storedDeductions = Number(payroll.deductions || 0)
+      + Number(payroll.penalties || 0)
+      + Number(payroll.loanAndAdvance || 0)
+      + Number(payroll.otherDeductions || 0)
+      + Number(payroll.pfAmount || 0)
+      + Number(payroll.esiAmount || 0);
     return {
       payrollId: payroll._id, employeeId: employee._id || payroll.employeeId, employeeCode: employee.employeeId || snapshot.employeeCode,
       name: employee.name || snapshot.name, profilePic: employee.profilePic || null, role: employee.role || snapshot.role,
@@ -1028,7 +1058,12 @@ const getStopPayrollList = async (query = {}, options = {}) => {
       reason: payroll.stopDetails?.reason || null, stopType: payroll.stopDetails?.stopType || null,
       from: payroll.stopDetails?.effectiveFrom || payroll.stopDetails?.stoppedAt || null,
       till: released ? payroll.stopDetails.resumedAt : (payroll.stopDetails?.resumeOn || null),
-      amount: Number(payroll.snapshot?.takeHome ?? payroll.totalPayableAmount ?? 0), status: payroll.status,
+      amount: takeHome,
+      currentMonthSalary: Number(payrollSnapshot.grossWages ?? payroll.totalSalary ?? 0),
+      days: { fullDays, halfDays, total: fullDays + (halfDays * 0.5) },
+      deductions: grossEarnings > 0 ? Number((grossEarnings - takeHome).toFixed(2)) : Number(storedDeductions.toFixed(2)),
+      payableAfterStop: takeHome,
+      status: payroll.status,
       stoppedAt: payroll.stopDetails?.stoppedAt || null, resumedAt: payroll.stopDetails?.resumedAt || null, resumeOn: payroll.stopDetails?.resumeOn || null,
     };
   });

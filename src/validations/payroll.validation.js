@@ -218,7 +218,7 @@ const getStopPayrollDashboard = {
   query: Joi.object().keys({
     month: Joi.number().integer().min(1).max(12).optional(), year: Joi.number().integer().min(2000).max(2100).optional(),
     role: Joi.string().valid('employee', 'staff').optional(), search: Joi.string().allow('').optional(),
-    departmentId: Joi.string().custom(objectId).optional(), status: Joi.string().valid('stopped', 'resumed', 'processed', 'paid').optional(),
+    departmentId: Joi.string().custom(objectId).optional(), shiftId: Joi.string().custom(objectId).optional(), status: Joi.string().valid('stopped', 'resumed', 'processed', 'paid').optional(),
     page: Joi.number().integer().min(1).optional(), limit: Joi.number().integer().min(1).max(100).optional(),
   }),
 };

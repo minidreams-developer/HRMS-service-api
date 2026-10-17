@@ -4,7 +4,6 @@ const ApiError = require('../utils/ApiError');
 const catchAsync = require('../utils/catchAsync');
 const { attendanceService } = require('../services');
 const { roleRights } = require('../config/roles');
-const managementRoles = new Set(['manager', 'hr_manager', 'subAdmin', 'admin']);
 
 const canReadEmployeeAttendance = (req) => {
   const rights = roleRights.get(req.user.role) || [];
@@ -32,7 +31,6 @@ const getAttendance = catchAsync(async (req, res) => {
 });
 
 const getPresentEmployeesToday = catchAsync(async (req, res) => {
-  if (!managementRoles.has(req.user.role)) throw new ApiError(httpStatus.FORBIDDEN, 'Only management may view present employees');
   const filters = {
     departmentId: req.query.departmentId || req.query.department,
     shiftId: req.query.shiftId || req.query.shift,
