@@ -26,7 +26,7 @@ describe('ATTENDANCE-02 employee attendance summary', () => {
       name: 'Summary Employee',
       email: employeeEmail(),
       role: 'employee',
-      workInformation: { shiftId: shift._id },
+      workInformation: { shiftId: shift._id, joinedDate: '2026-02-01' },
     });
   });
 

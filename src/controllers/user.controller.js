@@ -153,6 +153,100 @@ const getUsers = catchAsync(async (req, res) => {
   res.send(result);
 });
 
+const exportUsers = catchAsync(async (req, res) => {
+  const filter = pick(req.query, ['name', 'role']);
+  if (req.query.empId) filter.employeeId = req.query.empId;
+  const advancedFilters = {
+    search: req.query.search || null,
+    departmentId: req.query.departmentId || null,
+    teamId: req.query.teamId || null,
+    branchId: req.query.branchId || null,
+    designation: req.query.designation || null,
+    designationId: req.query.designationId || null,
+    shiftId: req.query.shiftId || null,
+    gender: req.query.gender || null,
+    status: req.query.status || null,
+    joinedFrom: req.query.joinedFrom || null,
+    joinedTo: req.query.joinedTo || null,
+    contractAgent: req.query.contractAgent || null,
+  };
+  const users = await userService.queryUsers(filter, { sortBy: req.query.sortBy, exportAll: true }, advancedFilters);
+  const escape = (value) => `"${String(value ?? '').replace(/"/g, '""')}"`;
+  const refName = (item, fallback = '') => {
+    if (!item || typeof item !== 'object') return fallback || item || '';
+    return item.name || item.departmentName || item.teamName || item.branchName || item.designationName || item.shiftName || '';
+  };
+  const addressText = (address) => (Array.isArray(address) ? address : address ? [address] : [])
+    .map((item) => [item.addressLine1, item.addressLine2, item.city, item.district, item.state, item.pincode, item.country].filter(Boolean).join(', ')).join(' | ');
+  const contactText = (contacts) => (Array.isArray(contacts) ? contacts : contacts ? [contacts] : [])
+    .map((item) => [item.contactName, item.relationship, item.phone || item.mobileNumber].filter(Boolean).join(' - ')).join(' | ');
+  const documentText = (documents) => (Array.isArray(documents) ? documents : documents ? [documents] : [])
+    .map((item) => item.documentName || item.fileName || '').filter(Boolean).join(' | ');
+  const salaryText = (salary) => salary ? [
+    salary.basicSalary && `Basic: ${salary.basicSalary}`,
+    salary.monthlyCTC && `Monthly CTC: ${salary.monthlyCTC}`,
+    salary.annualCTC && `Annual CTC: ${salary.annualCTC}`,
+    salary.houseRentAllowance && `HRA: ${salary.houseRentAllowance}`,
+    salary.conveyanceAllowance && `Conveyance: ${salary.conveyanceAllowance}`,
+    salary.specialAllowance && `Special: ${salary.specialAllowance}`,
+  ].filter(Boolean).join(' | ') : '';
+  const bankText = (banks) => (Array.isArray(banks) ? banks : banks ? [banks] : [])
+    .map((bank) => [bank.accountHolderName, bank.bankName, bank.ifscCode, bank.accountNumber].filter(Boolean).join(' - ')).join(' | ');
+  const rows = [
+    [
+      'Employee ID', 'Name', 'Email', 'Phone', 'Role', 'Status', 'Approval Status',
+      'Gender', 'Date of Birth', 'Age', 'Mother Tongue', 'Spoken Languages', 'Marital Status',
+      'Religion', 'Identification Mark', 'Profile Picture', 'Aadhar Number', 'PAN Number',
+      'Joined Date', 'Experience Type', 'Total Experience', 'Last Company', 'Last Company Experience',
+      'Location', 'Department', 'Team', 'Branch', 'Designation', 'Shift', 'Reporting Manager',
+      'Contract Agent', 'Attendance Type', 'User Remarks', 'Addresses', 'Emergency Contacts',
+      'Documents', 'Salary Details', 'Bank Details',
+    ],
+    ...users.map((user) => [
+      user.employeeId,
+      user.name,
+      user.email,
+      user.phone,
+      refName(user.roleId, user.role),
+      user.isActive,
+      user.approvalStatus,
+      user.gender,
+      user.dateOfBirth,
+      user.age,
+      user.motherTongue,
+      Array.isArray(user.spokenLanguages) ? user.spokenLanguages.map((item) => item.value || item.label || item).join(', ') : user.spokenLanguages,
+      user.maritalStatus || user.martialStatus,
+      user.religion,
+      user.identificationMark,
+      user.profilePic,
+      user.documentNo?.aadharNo,
+      user.documentNo?.panNo,
+      user.workInformation?.joinedDate,
+      user.workInformation?.experienceType,
+      user.workInformation?.totalExperience,
+      user.workInformation?.lastCompanyName,
+      user.workInformation?.lastCompanyExperience,
+      user.workInformation?.location,
+      refName(user.workInformation?.department, user.workInformation?.department),
+      refName(user.workInformation?.team, user.workInformation?.team),
+      refName(user.workInformation?.branch, user.workInformation?.branch),
+      refName(user.workInformation?.designation, user.workInformation?.designation),
+      refName(user.workInformation?.shiftId, user.workInformation?.shiftId),
+      refName(user.workInformation?.reportingPerson, user.workInformation?.reportingPerson),
+      refName(user.workInformation?.contractAgent, user.workInformation?.contractAgent),
+      user.workInformation?.AttendanceType,
+      user.workInformation?.userRemarks,
+      addressText(user.address),
+      contactText(user.emergencyContact),
+      documentText(user.userDocuments),
+      salaryText(user.workInformation?.SalaryDetails),
+      bankText(user.workInformation?.bankDetails),
+    ]),
+  ];
+  const csv = rows.map((row) => row.map(escape).join(',')).join('\n');
+  res.type('text/csv').attachment(`users-${req.query.role || 'all'}.csv`).send(csv);
+});
+
 const getUser = catchAsync(async (req, res) => {
   const user = await userService.getUserById(req.params.userId);
   if (!user) {
@@ -343,6 +437,7 @@ module.exports = {
   registerEmployee,
   createUser,
   getUsers,
+  exportUsers,
   getUser,
   getProfile,
   updateProfile,

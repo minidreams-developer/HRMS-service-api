@@ -301,7 +301,11 @@ const queryLeaveRequests = async (filter, options) => {
     ] });
   }
 
-  const populateOptions = { ...options, populate: 'employeeId,department,approvedBy,rejectedBy,cancelledBy' };
+  const populateOptions = {
+    ...options,
+    sortBy: options?.sortBy || 'createdAt:desc',
+    populate: 'employeeId,department,approvedBy,rejectedBy,cancelledBy',
+  };
   const result = await LeaveRequests.paginate(mongoFilter, populateOptions);
   return result;
 };

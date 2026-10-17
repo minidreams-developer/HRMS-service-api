@@ -44,6 +44,18 @@ describe('LEAVE-03 listing and history', () => {
     expect((await request(app).get('/v1/leave-requests?limit=1&page=2&sortBy=singleDate:desc').set(headers)).body).toMatchObject({ page: 2, limit: 1, totalResults: 3 });
   });
 
+  test('sorts the management list by most recently created request by default', async () => {
+    const older = await LeaveRequests.create(leave({ createdAt: new Date('2026-05-01T10:00:00.000Z') }));
+    const newer = await LeaveRequests.create(leave({
+      status: 'approved',
+      singleDate: '2026-05-16',
+      createdAt: new Date('2026-05-02T10:00:00.000Z'),
+    }));
+    const response = await request(app).get('/v1/leave-requests?role=employee').set({ Authorization: `Bearer ${token(admin)}` }).expect(httpStatus.OK);
+    expect(response.body.results[0].id).toBe(newer.id);
+    expect(response.body.results.some((item) => item.id === older.id)).toBe(true);
+  });
+
   test('uses overlap-aware date and year filters', async () => {
     await LeaveRequests.create(leave({ startDate: '2025-12-30', endDate: '2026-01-03', singleDate: null, status: 'approved' }));
     await LeaveRequests.create(leave({ singleDate: '2026-06-01', status: 'ended' }));

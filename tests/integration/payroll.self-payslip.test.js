@@ -37,6 +37,17 @@ describe('PAYHUB-02 self payroll and payslip', () => {
     await request(app).get(`/v1/payroll/me/${otherPayroll.payrollId}`).set(employeeHeaders).expect(httpStatus.NOT_FOUND);
     await request(app).get('/v1/payroll/me').set(staffHeaders).expect(200);
     await request(app).get(`/v1/payroll/${processed.payrollId}/payslip`).set(auth(admin)).expect(200);
+    const pdf = await request(app).get(`/v1/payroll/${processed.payrollId}/payslip/pdf`).set(auth(admin)).expect(200);
+    expect(pdf.headers['content-type']).toMatch(/application\/pdf/);
+    expect(pdf.headers['content-disposition']).toMatch(/payslip-.*\.pdf/);
+    expect(pdf.body.slice(0, 5).toString()).toBe('%PDF-');
+    const pdfText = pdf.body.toString('latin1');
+    expect(pdfText).toContain('PAYSLIP');
+    expect(pdfText).toContain('EMPLOYEE INFORMATION');
+    expect(pdfText).toContain('ATTENDANCE SUMMARY');
+    expect(pdfText).toContain('EARNINGS');
+    expect(pdfText).toContain('DEDUCTIONS');
+    expect(pdfText).toContain('NET PAYABLE');
     await request(app).get(`/v1/payroll/${processed.payrollId}/payslip`).expect(httpStatus.UNAUTHORIZED);
   });
 

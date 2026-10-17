@@ -444,13 +444,44 @@ const duplicateDateInfo = (records) => {
  * in the denominator because the current product rules do not exclude it.
  */
 const getEmployeeAttendanceSummary = async (employeeId, fromDate, toDate) => {
-  const from = utcDay(fromDate);
-  const to = utcDay(toDate);
-  if (from > to) throw new ApiError(httpStatus.BAD_REQUEST, 'fromDate must be before or equal to toDate');
+  const requestedFrom = utcDay(fromDate);
+  const requestedTo = utcDay(toDate);
+  if (requestedFrom > requestedTo) throw new ApiError(httpStatus.BAD_REQUEST, 'fromDate must be before or equal to toDate');
 
   const employeeObjectId = isObjectId(employeeId) ? new mongoose.Types.ObjectId(employeeId) : employeeId;
   const employee = await User.findById(employeeObjectId).lean();
   if (!employee) throw new ApiError(httpStatus.NOT_FOUND, 'Employee not found');
+
+  // Attendance cannot accrue before joining or after the current elapsed day.
+  // All date boundaries remain UTC calendar days, matching the attendance data model.
+  const joinedDate = employee.workInformation?.joinedDate ? utcDay(employee.workInformation.joinedDate) : requestedFrom;
+  const today = utcDay(new Date());
+  const from = new Date(Math.max(requestedFrom.getTime(), joinedDate.getTime()));
+  const to = new Date(Math.min(requestedTo.getTime(), today.getTime()));
+  if (from > to) {
+    return {
+      employeeId,
+      fromDate: requestedFrom,
+      toDate: requestedTo,
+      shiftDetails: null,
+      totalWorkingDays: 0,
+      fullDays: 0,
+      halfDays: 0,
+      absent: 0,
+      absentDays: 0,
+      overtime: 0,
+      overtimeDays: 0,
+      overtimeHours: 0,
+      dayOff: 0,
+      dayOffs: 0,
+      dayOffBreakdown: { assignedDayOff: 0, shiftWeekOff: 0 },
+      holidays: 0,
+      leaves: 0,
+      duplicateAttendanceDates: [],
+      overlappingOvertimeRecords: [],
+      overlappingOvertimeDates: [],
+    };
+  }
 
   const [attendanceRecords, leaveRecords, holidayRecords, dayOffRecords, overtimeRecords] = await Promise.all([
     Attendance.find({ employeeId: employeeObjectId, date: { $gte: from, $lte: rangeEnd(to) } }).sort({ date: 1, createdAt: 1 }).lean(),
@@ -513,19 +544,38 @@ const getEmployeeAttendanceSummary = async (employeeId, fromDate, toDate) => {
   const overtimeHours = safeOvertime.reduce((sum, record) => sum + (record.totalDuration || 0), 0);
   const holidayCount = holidayDays.size;
   const dayOffCount = [...dayOffDays].filter((key) => !holidayDays.has(key)).length;
+  const effectiveShift = shiftByDate.get(dayKey(to)) || [...shiftByDate.values()].find(Boolean) || null;
+  const fixedWorkingDays = effectiveShift
+    ? (effectiveShift.timings || []).filter((timing) => timing.off !== true).map((timing) => timing.day)
+    : [];
+  const compOffValues = (effectiveShift?.compOff || []).map((value) => String(value).toLowerCase());
+  const fullDays = countCategory('fullDay');
+  const halfDays = countCategory('halfDay');
+  const absentDays = countCategory('absent');
 
   return {
     employeeId,
     fromDate: from,
     toDate: to,
+    shiftDetails: effectiveShift ? {
+      shiftId: effectiveShift._id,
+      shiftName: effectiveShift.shiftName,
+      weekOff: effectiveShift.weekOff || [],
+      fixedWorkingDays,
+      // The shift schema has no separate working-on-holiday field.
+      workingOnHoliday: null,
+      compOffEligible: compOffValues.includes('yes'),
+    } : null,
     totalWorkingDays: days.length - holidayCount - dayOffCount,
-    fullDays: countCategory('fullDay'),
-    halfDays: countCategory('halfDay'),
-    absent: countCategory('absent'),
+    fullDays,
+    halfDays,
+    absent: absentDays,
+    absentDays,
     overtime: overtimeHours,
     overtimeDays,
     overtimeHours,
     dayOff: dayOffCount,
+    dayOffs: dayOffCount,
     dayOffBreakdown: { assignedDayOff: [...assignedDayOffDays].filter((key) => !holidayDays.has(key)).length, shiftWeekOff: [...shiftWeekOffDays].filter((key) => !holidayDays.has(key)).length },
     holidays: holidayCount,
     leaves: leaveDays.size,
@@ -561,7 +611,9 @@ const getEmployeeAttendance = async (employeeId, filter = {}, options = {}) => {
 };
 
 const getEmployeeCalendar = async (employeeId, fromDate, toDate) => {
-  const from = utcDay(fromDate); const to = utcDay(toDate);
+  const defaultDate = new Date();
+  const from = utcDay(fromDate || toDate || defaultDate);
+  const to = utcDay(toDate || fromDate || defaultDate);
   if (from > to) throw new ApiError(httpStatus.BAD_REQUEST, 'fromDate must be before or equal to toDate');
   const employeeObjectId = isObjectId(employeeId) ? new mongoose.Types.ObjectId(employeeId) : employeeId;
   const employee = await User.findById(employeeObjectId).lean();

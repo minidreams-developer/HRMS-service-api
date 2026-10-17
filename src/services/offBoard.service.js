@@ -96,7 +96,8 @@ const queryOffBoards = async (filter, options) => {
 
   const [offBoards, total] = await Promise.all([
     OffBoard.find(mongoFilter)
-      .populate('userId', 'name email employeeId')
+      .populate('userId', 'name email employeeId role workInformation.department')
+      .populate({ path: 'userId.workInformation.department', select: 'departmentName departmentCode departmentDescription' })
       .populate('userDocuments')
       .sort(options.sortBy ? options.sortBy.replace(':', ' ') : '-createdAt')
       .limit(limit)

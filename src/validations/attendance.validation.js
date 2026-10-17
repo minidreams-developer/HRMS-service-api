@@ -78,7 +78,7 @@ const getEmployeeAttendance = {
 
 const getEmployeeAttendanceCalendar = {
   params: Joi.object().keys({ employeeId: Joi.string().custom(objectId).required() }),
-  query: Joi.object().keys({ fromDate: Joi.date().iso().required(), toDate: Joi.date().iso().required() }),
+  query: Joi.object().keys({ fromDate: Joi.date().iso().optional(), toDate: Joi.date().iso().optional() }),
 };
 
 const updateAttendance = {

@@ -12,6 +12,7 @@ const createAnnouncement = {
     description:         Joi.string().optional(),
     content:             Joi.string().optional(),
     scheduleDateAndTime: Joi.date().optional(),
+    images:              Joi.array().items(imageSchema).optional(),
     audience: Joi.object({
       roles: Joi.array().items(Joi.string()),
       branches: Joi.array().items(Joi.string().custom(objectId)),

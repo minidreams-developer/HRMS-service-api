@@ -44,6 +44,10 @@ router
   .get(validate(userValidation.getUsersDropdown), userController.getUsersDropdown);
 
 router
+  .route('/export')
+  .get(auth('getUsers'), validate(userValidation.getUsers), userController.exportUsers);
+
+router
   .route('/employee/:employeeId')
   .get(validate(userValidation.getEmployeeByEmpId), userController.getEmployeeByEmpId);
 

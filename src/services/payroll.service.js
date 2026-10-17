@@ -258,6 +258,9 @@ const getPayrollList = async (query, options) => {
     role: { $in: ['employee', 'staff'] },
     isActive: 'Active',
   };
+  if (query.employeeId && mongoose.Types.ObjectId.isValid(query.employeeId)) {
+    userMatch._id = new mongoose.Types.ObjectId(query.employeeId);
+  }
 
   // Free-text search across name, employeeId, email
   if (query.search) {

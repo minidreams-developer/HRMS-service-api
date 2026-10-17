@@ -496,6 +496,21 @@ const queryUsers = async (filter, options, advancedFilters = {}) => {
     paginateOptions.sortBy = buildSort(options.sortBy);
   }
 
+  if (options.exportAll) {
+    const users = await User.find(mongoFilter)
+      .sort(paginateOptions.sortBy || { createdAt: -1 })
+      .lean();
+    await User.populate(users, [
+      { path: 'address' },
+      { path: 'emergencyContact' },
+      { path: 'userDocuments' },
+      { path: 'workInformation.SalaryDetails' },
+      { path: 'workInformation.bankDetails' },
+    ]);
+    await populateWorkInfo(users);
+    return users;
+  }
+
   // ── Run paginated query ─────────────────────────────────────────────────
   const result = await User.paginate(mongoFilter, paginateOptions);
 

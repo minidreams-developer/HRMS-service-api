@@ -2,6 +2,7 @@ const httpStatus = require('http-status');
 const pick = require('../utils/pick');
 const catchAsync = require('../utils/catchAsync');
 const { payrollService } = require('../services');
+const { Organization } = require('../models');
 const ApiError = require('../utils/ApiError');
 const selfServiceRoles = new Set(['employee', 'staff']);
 const managementRoles = new Set(['manager', 'hr_manager', 'subAdmin', 'admin']);
@@ -12,7 +13,7 @@ const managementRoles = new Set(['manager', 'hr_manager', 'subAdmin', 'admin']);
  * Query params: month, year, departmentId, shiftId, search, page, limit, sortBy
  */
 const getPayrollList = catchAsync(async (req, res) => {
-  const query   = pick(req.query, ['role', 'month', 'year', 'departmentId', 'shiftId', 'branchId', 'designation', 'search', 'status']);
+  const query   = pick(req.query, ['employeeId', 'role', 'month', 'year', 'departmentId', 'shiftId', 'branchId', 'designation', 'search', 'status']);
   const options = pick(req.query, ['sortBy', 'limit', 'page']);
   const result  = await payrollService.getPayrollList(query, options);
   res.send(result);
@@ -115,15 +116,74 @@ const getPayslipCsv = catchAsync(async (req, res) => {
 const getPayslipPdf = catchAsync(async (req, res) => {
   const self = assertPayslipAccess(req.user);
   const { payslip } = await payrollService.getPayslip(req.params.payrollId, self ? req.user._id : null);
-  const lines = payslipRows(payslip).map(([key, value]) => `${key}: ${value ?? ''}`);
-  const escapePdf = (value) => String(value).replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
-  const content = `BT /F1 10 Tf 50 760 Td ${lines.map((line, i) => `${i ? '0 -16 Td ' : ''}(${escapePdf(line)}) Tj`).join(' ')} ET`;
+  const organization = await Organization.findOne().populate('address').lean();
+  const details = payslip.employeeDetails || {};
+  const salary = details.workInformation?.SalaryDetails || {};
+  const bank = (Array.isArray(details.workInformation?.bankDetails) ? details.workInformation.bankDetails[0] : details.workInformation?.bankDetails) || {};
+  const firstAddress = Array.isArray(details.address) ? details.address[0] || {} : details.address || {};
+  const value = (item, fallback = 'N/A') => item === undefined || item === null || item === '' ? fallback : item;
+  const money = (item) => `₹${Number(item || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const date = (item) => item ? new Date(item).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' }) : 'N/A';
+  const scalar = (item) => item && typeof item === 'object' ? (item.designationName || item.departmentName || item.name || item._id) : item;
+  const employeeName = value(payslip.employee.name);
+  const department = value(scalar(payslip.employee.department));
+  const designation = value(scalar(payslip.employee.designation));
+  const state = value(firstAddress.state);
+  const location = value(details.workInformation?.location);
+  const joinedDate = date(details.workInformation?.joinedDate);
+  const pfNumber = value(bank.esiAndPf?.pfNumber);
+  const esiNumber = value(bank.esiAndPf?.esiNumber);
+  const uanNumber = value(bank.esiAndPf?.uanNumber || bank.uanNumber);
+  const companyName = value(organization?.companyName, 'Ace Workforce');
+  const companySubtitle = organization?.address
+    ? [organization.address.addressLine1, organization.address.city, organization.address.state].filter(Boolean).join(', ')
+    : 'Workforce Management';
+  const esc = (item) => String(item).replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)').replace(/[\r\n]/g, ' ');
+  const commands = [];
+  // Keep text operators inside their own BT/ET block. Graphics operators such
+  // as q, rg, re, f, and line paths are invalid inside a text object and can
+  // cause PDF viewers to discard all following text.
+  const text = (x, y, item, size = 8.5, bold = false, color = '0 0 0') => commands.push(`BT ${color} rg /${bold ? 'F2' : 'F1'} ${size} Tf ${x} ${y} Td (${esc(item)}) Tj ET`);
+  const line = (y) => commands.push(`0.82 0.86 0.88 RG 0.5 w 42 ${y} m 553 ${y} l S`);
+  const section = (y, title) => { line(y + 6); text(42, y - 10, title, 10, true, '0.02 0.42 0.46'); };
+  const row = (y, left, right) => { text(42, y, left[0], 7, false, '0.35 0.38 0.4'); text(42, y - 12, value(left[1]), 8.5, true); text(300, y, right[0], 7, false, '0.35 0.38 0.4'); text(300, y - 12, value(right[1]), 8.5, true); };
+  commands.push('q 1 1 1 rg 0 0 595 842 re f Q');
+  text(42, 804, companyName, 18, true, '0.02 0.20 0.23');
+  text(42, 788, companySubtitle || 'Workforce Management', 8.5, false, '0.35 0.38 0.4');
+  text(250, 804, 'PAYSLIP', 16, true, '0.02 0.42 0.46');
+  text(42, 764, `Payroll period: ${value(payslip.month)}/${value(payslip.year)}`, 8.5, false);
+  section(742, 'EMPLOYEE INFORMATION');
+  row(720, ['Employee Name', employeeName], ['Employee ID', value(payslip.employee.employeeCode)]);
+  row(684, ['Department', department], ['State', state]);
+  row(648, ['Date of Joining', joinedDate], ['PF Number', pfNumber]);
+  row(612, ['ESI Number', esiNumber], ['Designation', designation]);
+  row(576, ['UAN Number', uanNumber], ['Location', location]);
+  section(540, 'ATTENDANCE SUMMARY');
+  row(518, ['Payroll Status', value(payslip.status)], ['Full Days', value(payslip.attendance.fullDays, 0)]);
+  row(482, ['Half Days', value(payslip.attendance.halfDays, 0)], ['Absent Days', value(payslip.attendance.absentDays, 0)]);
+  row(446, ['Paid Leaves', value(payslip.attendance.paidLeaves, 0)], ['Unpaid Leaves', value(payslip.attendance.unpaidLeaves, 0)]);
+  row(410, ['Overtime Hours', value(payslip.attendance.overtimeHours, 0)], ['Location', location]);
+  section(374, 'EARNINGS');
+  text(300, 364, 'DEDUCTIONS', 10, true, '0.02 0.42 0.46');
+  row(352, ['Gross Wages', money(payslip.earnings.grossWages)], ['Deductions', money(payslip.deductions.deductions)]);
+  row(316, ['Earned Wages', money(payslip.earnings.earnedWages)], ['Penalties', money(payslip.deductions.penalties)]);
+  row(280, ['Overtime Amount', money(payslip.earnings.overtimeAmount)], ['Loan and Advance', money(payslip.deductions.loanAndAdvance)]);
+  row(244, ['Extras', money(payslip.earnings.extras)], ['Other Deductions', money(payslip.deductions.otherDeductions)]);
+  row(208, ['Other Wages', money(payslip.earnings.otherWages)], ['PF Amount', money(payslip.deductions.pfAmount)]);
+  row(172, ['Gross Earnings', money(payslip.earnings.grossEarnings)], ['ESI Amount', money(payslip.deductions.esiAmount)]);
+  row(136, ['Total Earnings', money(payslip.earnings.grossEarnings)], ['Total Deductions', money(payslip.deductions.totalDeductions)]);
+  commands.push('0.92 0.95 0.96 rg 42 78 511 38 re f');
+  text(56, 96, 'NET PAYABLE', 9, true, '0.02 0.42 0.46');
+  text(430, 91, money(payslip.takeHome), 14, true, '0.02 0.42 0.46');
+  text(42, 54, `Computer-generated document | Payroll ${value(payslip.month)}/${value(payslip.year)}`, 7, false, '0.4 0.4 0.4');
+  const content = commands.join(' ');
   const objects = [
     '<< /Type /Catalog /Pages 2 0 R >>',
     '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
-    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 5 0 R /F2 6 0 R >> >> /Contents 4 0 R >>',
     `<< /Length ${Buffer.byteLength(content)} >>\nstream\n${content}\nendstream`,
     '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>',
   ];
   let pdf = '%PDF-1.4\n'; const offsets = [0];
   objects.forEach((object, index) => { offsets[index + 1] = Buffer.byteLength(pdf); pdf += `${index + 1} 0 obj\n${object}\nendobj\n`; });
