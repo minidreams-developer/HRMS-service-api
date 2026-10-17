@@ -135,6 +135,8 @@ const payrollSchema = new mongoose.Schema(
       fullDays: { type: Number, default: 0 },
       halfDays: { type: Number, default: 0 },
       offDays: { type: Number, default: 0 },
+      absentDays: { type: Number, default: 0 },
+      workingDays: { type: Number, default: 0 },
       paidLeaves: { type: Number, default: 0 },
       unpaidLeaves: { type: Number, default: 0 },
       dailyRate: { type: Number, default: 0 },

@@ -1,4 +1,7 @@
 const httpStatus = require('http-status');
+const fs = require('fs');
+// Explicit entry point keeps compatibility with the project's older Jest resolver.
+const PDFDocument = require('pdfkit/js/pdfkit');
 const pick = require('../utils/pick');
 const catchAsync = require('../utils/catchAsync');
 const { payrollService } = require('../services');
@@ -122,7 +125,7 @@ const getPayslipPdf = catchAsync(async (req, res) => {
   const bank = (Array.isArray(details.workInformation?.bankDetails) ? details.workInformation.bankDetails[0] : details.workInformation?.bankDetails) || {};
   const firstAddress = Array.isArray(details.address) ? details.address[0] || {} : details.address || {};
   const value = (item, fallback = 'N/A') => item === undefined || item === null || item === '' ? fallback : item;
-  const money = (item) => `₹${Number(item || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const money = (item) => item === undefined || item === null || item === '' ? 'N/A' : `₹${Number(item).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   const date = (item) => item ? new Date(item).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' }) : 'N/A';
   const scalar = (item) => item && typeof item === 'object' ? (item.designationName || item.departmentName || item.name || item._id) : item;
   const employeeName = value(payslip.employee.name);
@@ -138,57 +141,37 @@ const getPayslipPdf = catchAsync(async (req, res) => {
   const companySubtitle = organization?.address
     ? [organization.address.addressLine1, organization.address.city, organization.address.state].filter(Boolean).join(', ')
     : 'Workforce Management';
-  const esc = (item) => String(item).replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)').replace(/[\r\n]/g, ' ');
-  const commands = [];
-  // Keep text operators inside their own BT/ET block. Graphics operators such
-  // as q, rg, re, f, and line paths are invalid inside a text object and can
-  // cause PDF viewers to discard all following text.
-  const text = (x, y, item, size = 8.5, bold = false, color = '0 0 0') => commands.push(`BT ${color} rg /${bold ? 'F2' : 'F1'} ${size} Tf ${x} ${y} Td (${esc(item)}) Tj ET`);
-  const line = (y) => commands.push(`0.82 0.86 0.88 RG 0.5 w 42 ${y} m 553 ${y} l S`);
-  const section = (y, title) => { line(y + 6); text(42, y - 10, title, 10, true, '0.02 0.42 0.46'); };
-  const row = (y, left, right) => { text(42, y, left[0], 7, false, '0.35 0.38 0.4'); text(42, y - 12, value(left[1]), 8.5, true); text(300, y, right[0], 7, false, '0.35 0.38 0.4'); text(300, y - 12, value(right[1]), 8.5, true); };
-  commands.push('q 1 1 1 rg 0 0 595 842 re f Q');
-  text(42, 804, companyName, 18, true, '0.02 0.20 0.23');
-  text(42, 788, companySubtitle || 'Workforce Management', 8.5, false, '0.35 0.38 0.4');
-  text(250, 804, 'PAYSLIP', 16, true, '0.02 0.42 0.46');
-  text(42, 764, `Payroll period: ${value(payslip.month)}/${value(payslip.year)}`, 8.5, false);
-  section(742, 'EMPLOYEE INFORMATION');
-  row(720, ['Employee Name', employeeName], ['Employee ID', value(payslip.employee.employeeCode)]);
-  row(684, ['Department', department], ['State', state]);
-  row(648, ['Date of Joining', joinedDate], ['PF Number', pfNumber]);
-  row(612, ['ESI Number', esiNumber], ['Designation', designation]);
-  row(576, ['UAN Number', uanNumber], ['Location', location]);
-  section(540, 'ATTENDANCE SUMMARY');
-  row(518, ['Payroll Status', value(payslip.status)], ['Full Days', value(payslip.attendance.fullDays, 0)]);
-  row(482, ['Half Days', value(payslip.attendance.halfDays, 0)], ['Absent Days', value(payslip.attendance.absentDays, 0)]);
-  row(446, ['Paid Leaves', value(payslip.attendance.paidLeaves, 0)], ['Unpaid Leaves', value(payslip.attendance.unpaidLeaves, 0)]);
-  row(410, ['Overtime Hours', value(payslip.attendance.overtimeHours, 0)], ['Location', location]);
-  section(374, 'EARNINGS');
-  text(300, 364, 'DEDUCTIONS', 10, true, '0.02 0.42 0.46');
-  row(352, ['Gross Wages', money(payslip.earnings.grossWages)], ['Deductions', money(payslip.deductions.deductions)]);
-  row(316, ['Earned Wages', money(payslip.earnings.earnedWages)], ['Penalties', money(payslip.deductions.penalties)]);
-  row(280, ['Overtime Amount', money(payslip.earnings.overtimeAmount)], ['Loan and Advance', money(payslip.deductions.loanAndAdvance)]);
-  row(244, ['Extras', money(payslip.earnings.extras)], ['Other Deductions', money(payslip.deductions.otherDeductions)]);
-  row(208, ['Other Wages', money(payslip.earnings.otherWages)], ['PF Amount', money(payslip.deductions.pfAmount)]);
-  row(172, ['Gross Earnings', money(payslip.earnings.grossEarnings)], ['ESI Amount', money(payslip.deductions.esiAmount)]);
-  row(136, ['Total Earnings', money(payslip.earnings.grossEarnings)], ['Total Deductions', money(payslip.deductions.totalDeductions)]);
-  commands.push('0.92 0.95 0.96 rg 42 78 511 38 re f');
-  text(56, 96, 'NET PAYABLE', 9, true, '0.02 0.42 0.46');
-  text(430, 91, money(payslip.takeHome), 14, true, '0.02 0.42 0.46');
-  text(42, 54, `Computer-generated document | Payroll ${value(payslip.month)}/${value(payslip.year)}`, 7, false, '0.4 0.4 0.4');
-  const content = commands.join(' ');
-  const objects = [
-    '<< /Type /Catalog /Pages 2 0 R >>',
-    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
-    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 5 0 R /F2 6 0 R >> >> /Contents 4 0 R >>',
-    `<< /Length ${Buffer.byteLength(content)} >>\nstream\n${content}\nendstream`,
-    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
-    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>',
-  ];
-  let pdf = '%PDF-1.4\n'; const offsets = [0];
-  objects.forEach((object, index) => { offsets[index + 1] = Buffer.byteLength(pdf); pdf += `${index + 1} 0 obj\n${object}\nendobj\n`; });
-  const xref = Buffer.byteLength(pdf); pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets.slice(1).map((offset) => `${String(offset).padStart(10, '0')} 00000 n `).join('\n')}\ntrailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
-  res.type('application/pdf').attachment(`payslip-${req.params.payrollId}.pdf`).send(Buffer.from(pdf));
+  const fontCandidates = [process.env.PAYSLIP_FONT_PATH, '/System/Library/Fonts/Supplemental/Arial Unicode.ttf', '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'].filter(Boolean);
+  const unicodeFont = fontCandidates.find((font) => fs.existsSync(font));
+  const doc = new PDFDocument({ size: 'A4', margin: 42, bufferPages: true });
+  res.type('application/pdf').attachment(`payslip-${req.params.payrollId}.pdf`);
+  if (unicodeFont) doc.font(unicodeFont);
+  const teal = '#087681'; const muted = '#687277'; const divider = '#d9e0e2';
+  const label = (x, y, title, item, width = 120) => { doc.fillColor(muted).fontSize(7).text(title, x, y, { width }); doc.fillColor('#10282b').fontSize(8.5).text(value(item), x, y + 11, { width }); };
+  const section = (y, title) => { doc.strokeColor(divider).moveTo(42, y).lineTo(553, y).stroke(); doc.fillColor(teal).fontSize(10).text(title, 42, y + 8); };
+  const grid = (y, values, columns = 4) => { const width = 511 / columns; values.forEach((item, index) => label(42 + (index % columns) * width, y + Math.floor(index / columns) * 34, item[0], item[1], width - 12)); };
+  doc.fillColor('#10282b').fontSize(18).text(companyName, 42, 42);
+  doc.fillColor(muted).fontSize(8.5).text(companySubtitle || 'Workforce Management', 42, 64);
+  doc.fillColor(teal).fontSize(17).text('PAYSLIP', 250, 48, { width: 120, align: 'center' });
+  doc.fillColor(muted).fontSize(8).text(`Payroll period: ${value(payslip.month)}/${value(payslip.year)}`, 42, 88);
+  section(108, 'EMPLOYEE INFORMATION');
+  grid(126, [['Employee Name', employeeName], ['Employee ID', payslip.employee.employeeCode], ['Department', department], ['State', state], ['Date of Joining', joinedDate], ['PF Number', pfNumber], ['ESI Number', esiNumber], ['Working Days', payslip.attendance.workingDays], ['Designation', designation], ['UAN Number', uanNumber]]);
+  section(226, 'ATTENDANCE SUMMARY');
+  grid(244, [['Payroll Status', payslip.status], ['Full Days', payslip.attendance.fullDays], ['Half Days', payslip.attendance.halfDays], ['Absent Days', payslip.attendance.absentDays], ['Paid Leaves', payslip.attendance.paidLeaves], ['Unpaid Leaves', payslip.attendance.unpaidLeaves], ['Overtime Hours', payslip.attendance.overtimeHours], ['Location', location]]);
+  section(326, 'EARNINGS');
+  doc.fillColor(teal).fontSize(10).text('DEDUCTIONS', 310, 334);
+  const earnings = [['Gross Wages', payslip.earnings.grossWages], ['Earned Wages', payslip.earnings.earnedWages], ['Overtime Amount', payslip.earnings.overtimeAmount], ['Extras', payslip.earnings.extras], ['Other Wages', payslip.earnings.otherWages], ['Gross Earnings', payslip.earnings.grossEarnings]];
+  const deductions = [['Deductions', payslip.deductions.deductions], ['Penalties', payslip.deductions.penalties], ['Loan and Advance', payslip.deductions.loanAndAdvance], ['Other Deductions', payslip.deductions.otherDeductions], ['PF Amount', payslip.deductions.pfAmount], ['ESI Amount', payslip.deductions.esiAmount]];
+  earnings.forEach((item, index) => { const y = 354 + index * 24; doc.fillColor(muted).fontSize(8).text(item[0], 42, y); doc.fillColor('#10282b').fontSize(8).text(money(item[1]), 180, y, { width: 90, align: 'right' }); });
+  deductions.forEach((item, index) => { const y = 354 + index * 24; doc.fillColor(muted).fontSize(8).text(item[0], 310, y); doc.fillColor('#10282b').fontSize(8).text(money(item[1]), 448, y, { width: 90, align: 'right' }); });
+  doc.strokeColor(divider).moveTo(42, 506).lineTo(553, 506).stroke();
+  doc.fillColor('#10282b').fontSize(8.5).text('Gross Earnings', 42, 516); doc.text(money(payslip.earnings.grossEarnings), 180, 516, { width: 90, align: 'right' });
+  doc.text('Total Deductions', 310, 516); doc.text(money(payslip.deductions.totalDeductions), 448, 516, { width: 90, align: 'right' });
+  doc.roundedRect(42, 560, 511, 54, 6).fill('#eef3f4');
+  doc.fillColor(teal).fontSize(10).text('NET PAYABLE', 58, 580); doc.fontSize(15).text(money(payslip.takeHome), 300, 577, { width: 150, align: 'right' });
+  doc.fillColor(muted).fontSize(8).text(`${value(payslip.month)}/${value(payslip.year)}`, 465, 584, { width: 70, align: 'right' });
+  doc.fillColor(muted).fontSize(7).text('Computer-generated document; no signature required.', 42, 780);
+  doc.pipe(res); doc.end();
 });
 
 /**
