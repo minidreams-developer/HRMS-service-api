@@ -11,11 +11,11 @@ const getQuickStats = catchAsync(async (req, res) => {
 });
 
 const getDay = catchAsync(async (req, res) => {
-  res.send(await timesheetService.getDay(pick(req.query, ['date', 'role', 'search', 'departmentId', 'shiftId', 'status', 'page', 'limit', 'sortBy'])));
+  res.send(await timesheetService.getDay(pick(req.query, ['date', 'role', 'search', 'departmentId', 'departmentIds', 'designation', 'designationIds', 'shiftId', 'shiftIds', 'status', 'page', 'limit', 'sortBy'])));
 });
 
 const getWeek = catchAsync(async (req, res) => {
-  res.send(await timesheetService.getWeek(pick(req.query, ['startDate', 'role', 'search', 'departmentId', 'shiftId', 'page', 'limit', 'sortBy'])));
+  res.send(await timesheetService.getWeek(pick(req.query, ['startDate', 'role', 'search', 'departmentId', 'departmentIds', 'designation', 'designationIds', 'shiftId', 'shiftIds', 'page', 'limit', 'sortBy'])));
 });
 
 const getDateDetail = catchAsync(async (req, res) => {

@@ -1,6 +1,15 @@
 const Joi = require('joi');
 const { password, objectId } = require('./custom.validation');
 
+const objectIdList = Joi.alternatives().try(
+  Joi.array().items(Joi.string().custom(objectId)),
+  Joi.string().custom((value, helpers) => {
+    const values = String(value).split(',').map((item) => item.trim()).filter(Boolean);
+    if (!values.length || values.some((item) => !/^[0-9a-fA-F]{24}$/.test(item))) return helpers.error('any.invalid');
+    return value;
+  })
+).optional();
+
 // Custom validation for status - accepts case-insensitive and normalizes to proper case
 const statusValidator = (value, helpers) => {
   const normalizedValue = value.toLowerCase();
@@ -52,11 +61,14 @@ const getUsers = {
 
     // ── Work-information filters ─────────────────────────────────────────────
     departmentId: Joi.string().custom(objectId).optional(),
+    departmentIds: objectIdList,
     teamId:       Joi.string().custom(objectId).optional(),
     branchId:     Joi.string().custom(objectId).optional(),
     designation:  Joi.string().optional(),
     designationId: Joi.string().custom(objectId).optional(),
+    designationIds: objectIdList,
     shiftId:      Joi.string().custom(objectId).optional(),
+    shiftIds: objectIdList,
     contractAgent: Joi.string().optional(),
 
     // ── Status filter — Active | In-Active | Relieved ────────────────────────

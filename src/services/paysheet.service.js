@@ -426,6 +426,7 @@ const refreshPaysheet = async (month, year, organizationId = null) => {
  *          issueDate, salary, OT, total, status
  */
 const getPayrollList = async (query, options) => {
+  const { parseList, parseSort } = require('../utils/queryFilters');
   const month  = parseInt(query.month,  10) || new Date().getMonth() + 1;
   const year   = parseInt(query.year,   10) || new Date().getFullYear();
   const limit  = parseInt(options.limit, 10) > 0 ? parseInt(options.limit, 10) : 10;
@@ -437,14 +438,7 @@ const getPayrollList = async (query, options) => {
   if (query.status) payrollMatch.status = query.status;
 
   // Sort stage
-  let sort = { createdAt: -1 };
-  if (options.sortBy) {
-    sort = {};
-    options.sortBy.split(',').forEach((opt) => {
-      const [key, order] = opt.split(':');
-      sort[key] = order === 'desc' ? -1 : 1;
-    });
-  }
+  const sort = parseSort(options.sortBy, ['createdAt', 'name', 'status', 'month', 'year'], { createdAt: -1 });
 
   // Build lookup pipeline
   const pipeline = [
@@ -501,8 +495,15 @@ const getPayrollList = async (query, options) => {
         ]
       : []),
     // Apply department filter
-    ...(query.departmentId && mongoose.Types.ObjectId.isValid(query.departmentId)
-      ? [{ $match: { 'department._id': new mongoose.Types.ObjectId(query.departmentId) } }]
+    ...(parseList(query.departmentIds || query.departmentId).length
+      ? [{ $match: { 'department._id': { $in: parseList(query.departmentIds || query.departmentId).filter((value) => mongoose.Types.ObjectId.isValid(value)).map((value) => new mongoose.Types.ObjectId(value)) } } }]
+      : []),
+    ...(query.designation ? [{ $match: { 'employee.workInformation.designation': { $regex: query.designation, $options: 'i' } } }] : []),
+    ...(parseList(query.designationIds).length
+      ? [{ $match: { 'employee.workInformation.designationId': { $in: parseList(query.designationIds).filter((value) => mongoose.Types.ObjectId.isValid(value)).map((value) => new mongoose.Types.ObjectId(value)) } } }]
+      : []),
+    ...(parseList(query.shiftIds || query.shiftId).length
+      ? [{ $match: { 'employee.workInformation.shiftId': { $in: parseList(query.shiftIds || query.shiftId).filter((value) => mongoose.Types.ObjectId.isValid(value)).map((value) => new mongoose.Types.ObjectId(value)) } } }]
       : []),
     // Project final shape
     {

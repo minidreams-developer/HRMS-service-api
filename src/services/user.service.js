@@ -7,6 +7,8 @@ const { generateEmployeeId: generateId, generateStaffId: generateStaffIdUtil, ge
 const { allocateNextNumber } = require('./seriesConfiguration.service');
 const { setPending, getPending, clearPending } = require('../utils/pendingCode');
 const mongoose = require('mongoose');
+const { parseList } = require('../utils/queryFilters');
+const mergedObjectIds = (...values) => [...new Set(values.flatMap((value) => parseList(value)))];
 
 /**
  * Convert a value to ObjectId if it is a valid ObjectId string.
@@ -393,11 +395,12 @@ const queryUsers = async (filter, options, advancedFilters = {}) => {
   }
 
   // Department filter — workInformation.department stores Mixed (ObjectId or object)
-  if (advancedFilters.departmentId && isObjectId(advancedFilters.departmentId)) {
-    const departmentId = new mongoose.Types.ObjectId(advancedFilters.departmentId);
+  const departmentIds = mergedObjectIds(advancedFilters.departmentId, advancedFilters.departmentIds);
+  if (departmentIds.length) {
+    const objectIds = departmentIds.map((id) => new mongoose.Types.ObjectId(id));
     const clause = { $or: [
-      { 'workInformation.department': { $in: [departmentId, advancedFilters.departmentId] } },
-      { 'workInformation.department._id': { $in: [departmentId, advancedFilters.departmentId] } },
+      { 'workInformation.department': { $in: [...objectIds, ...departmentIds] } },
+      { 'workInformation.department._id': { $in: [...objectIds, ...departmentIds] } },
     ] };
     mongoFilter.$and = [...(mongoFilter.$and || []), clause];
   }
@@ -426,21 +429,23 @@ const queryUsers = async (filter, options, advancedFilters = {}) => {
     }
   }
 
-  if (advancedFilters.designationId && isObjectId(advancedFilters.designationId)) {
-    const designationId = new mongoose.Types.ObjectId(advancedFilters.designationId);
+  const designationIds = mergedObjectIds(advancedFilters.designationId, advancedFilters.designationIds);
+  if (designationIds.length) {
+    const objectIds = designationIds.map((id) => new mongoose.Types.ObjectId(id));
     const clause = { $or: [
-      { 'workInformation.designationId': designationId },
-      { 'workInformation.designation': advancedFilters.designationId },
+      { 'workInformation.designationId': { $in: [...objectIds, ...designationIds] } },
+      { 'workInformation.designation': { $in: designationIds } },
     ] };
     mongoFilter.$and = [...(mongoFilter.$and || []), clause];
   }
 
   // Shift filter
-  if (advancedFilters.shiftId && isObjectId(advancedFilters.shiftId)) {
-    const shiftId = new mongoose.Types.ObjectId(advancedFilters.shiftId);
+  const shiftIds = mergedObjectIds(advancedFilters.shiftId, advancedFilters.shiftIds);
+  if (shiftIds.length) {
+    const objectIds = shiftIds.map((id) => new mongoose.Types.ObjectId(id));
     const clause = { $or: [
-      { 'workInformation.shiftId': { $in: [shiftId, advancedFilters.shiftId] } },
-      { 'workInformation.shiftId._id': { $in: [shiftId, advancedFilters.shiftId] } },
+      { 'workInformation.shiftId': { $in: [...objectIds, ...shiftIds] } },
+      { 'workInformation.shiftId._id': { $in: [...objectIds, ...shiftIds] } },
     ] };
     mongoFilter.$and = [...(mongoFilter.$and || []), clause];
   }

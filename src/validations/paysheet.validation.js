@@ -65,6 +65,11 @@ const getPayrollList = {
     search:       Joi.string().allow('').optional(),       // name or employeeId
     status:       Joi.string().valid('draft', 'processed', 'paid', 'stopped', 'resumed').optional(),
     departmentId: Joi.string().custom(objectId).optional(),
+    departmentIds: Joi.alternatives().try(Joi.string(), Joi.array().items(Joi.string().custom(objectId))).optional(),
+    designation: Joi.string().optional(),
+    designationIds: Joi.alternatives().try(Joi.string(), Joi.array().items(Joi.string().custom(objectId))).optional(),
+    shiftId: Joi.string().custom(objectId).optional(),
+    shiftIds: Joi.alternatives().try(Joi.string(), Joi.array().items(Joi.string().custom(objectId))).optional(),
     page:         Joi.number().integer().min(1).optional(),
     limit:        Joi.number().integer().min(1).max(100).optional(),
     sortBy:       Joi.string().optional(),                 // e.g. "name:asc"

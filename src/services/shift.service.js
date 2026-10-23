@@ -62,6 +62,7 @@ const createShift = async (body, actor) => {
  */
 const queryShifts = async (filter, options) => {
   const mongoFilter = {};
+  const values = (value) => (value == null || value === '' ? [] : (Array.isArray(value) ? value : String(value).split(',')).map((item) => String(item).trim()).filter(Boolean));
 
   // Free-text search across shift name, code and type
   if (filter.search) {
@@ -81,7 +82,9 @@ const queryShifts = async (filter, options) => {
     if (filter.shiftCode) {
       mongoFilter.shiftCode = filter.shiftCode;
     }
-    if (filter.shiftType) {
+    if (filter.shiftTypes) {
+      mongoFilter.shiftType = { $in: values(filter.shiftTypes) };
+    } else if (filter.shiftType) {
       mongoFilter.shiftType = { $regex: filter.shiftType, $options: 'i' };
     }
   }

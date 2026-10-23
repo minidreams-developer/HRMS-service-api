@@ -25,7 +25,7 @@ const createLeaveRequests = catchAsync(async (req, res) => {
 
 const getLeaveRequests = catchAsync(async (req, res) => {
   if (!canManage(req.user)) throw new ApiError(httpStatus.FORBIDDEN, 'Only management may use the management leave list');
-  const filter  = pick(req.query, ['search', 'employeeId', 'role', 'leaveType', 'status', 'departmentId', 'fromDate', 'toDate']);
+  const filter  = pick(req.query, ['search', 'employeeId', 'role', 'leaveType', 'status', 'departmentId', 'departmentIds', 'designation', 'designationIds', 'fromDate', 'toDate']);
   const options = pick(req.query, ['sortBy', 'limit', 'page']);
   if (!canManage(req.user)) filter.employeeId = req.user._id;
   const result  = await leaveRequestsService.queryLeaveRequests(filter, options);

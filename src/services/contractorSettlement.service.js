@@ -25,7 +25,19 @@ const process = async (contractorId, month, year, actorId) => {
   return ContractorSettlement.findOneAndUpdate({ contractorId, month, year }, { $set: update, $setOnInsert: { contractorId, month, year } }, { new: true, upsert: true, runValidators: true });
 };
 const markPaid = async (id, actorId) => { const s = await ContractorSettlement.findById(id); if (!s) throw new ApiError(404, 'Settlement not found'); if (s.status !== 'processed') throw new ApiError(400, 'Only processed settlements can be paid'); s.status = 'paid'; s.paidBy = actorId; s.paidAt = new Date(); return s.save(); };
-const list = async (filter, options) => ContractorSettlement.paginate(filter, options);
+const list = async (filter, options) => {
+  const { parseSort } = require('../utils/queryFilters');
+  const query = { ...(filter.contractorId ? { contractorId: filter.contractorId } : {}), ...(filter.month ? { month: filter.month } : {}), ...(filter.year ? { year: filter.year } : {}), ...(filter.status ? { status: filter.status } : {}) };
+  if (filter.fromDate || filter.toDate) {
+    const range = {};
+    if (filter.fromDate) range.$gte = new Date(filter.fromDate);
+    if (filter.toDate) range.$lte = new Date(new Date(filter.toDate).setUTCHours(23, 59, 59, 999));
+    query.$or = [{ processedAt: range }, { paidAt: range }];
+  }
+  const sort = parseSort(options.sortBy, ['createdAt', 'processedAt', 'paidAt', 'totalShare', 'month', 'year', 'status'], { year: -1, month: -1 });
+  const sortBy = Object.entries(sort).map(([field, direction]) => `${field}:${direction === -1 ? 'desc' : 'asc'}`).join(',');
+  return ContractorSettlement.paginate(query, { ...options, sortBy });
+};
 const detail = async (id) => ContractorSettlement.findById(id).populate('contractorId', 'name employeeId role isActive isDeleted');
 const earnings = async (contractorId, filter, options) => { const rows = await ContractorSettlement.find({ contractorId, ...filter }).sort({ year: -1, month: -1 }).skip((options.page - 1) * options.limit).limit(options.limit).lean(); const totalResults = await ContractorSettlement.countDocuments({ contractorId, ...filter }); return { results: rows.map((r) => ({ month: r.month, year: r.year, workerCount: r.workerItems.length, totalShare: r.totalShare, status: r.status, processedAt: r.processedAt, paidAt: r.paidAt })), page: options.page, limit: options.limit, totalResults, totalPages: Math.ceil(totalResults / options.limit) }; };
 module.exports = { process, markPaid, list, detail, earnings, management };

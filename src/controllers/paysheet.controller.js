@@ -81,7 +81,7 @@ const refreshPaysheet = catchAsync(async (req, res) => {
  * Query params: month, year, search, status, departmentId, page, limit, sortBy
  */
 const getPayrollList = catchAsync(async (req, res) => {
-  const query   = pick(req.query, ['month', 'year', 'search', 'status', 'departmentId']);
+  const query   = pick(req.query, ['month', 'year', 'search', 'status', 'departmentId', 'departmentIds', 'designation', 'designationIds', 'shiftId', 'shiftIds']);
   const options = pick(req.query, ['page', 'limit', 'sortBy']);
   const result  = await paysheetService.getPayrollList(query, options);
   res.send(result);

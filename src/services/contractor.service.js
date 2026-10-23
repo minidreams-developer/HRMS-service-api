@@ -195,7 +195,11 @@ const registerContractor = async (body) => {
  * @returns {Promise<QueryResult>}
  */
 const queryContractors = async (filter, options) => {
-  const contractorFilter = { ...filter, role: 'contractor' };
+  const contractorFilter = { role: 'contractor', isDeleted: { $ne: true } };
+  if (filter.name) contractorFilter.name = { $regex: filter.name, $options: 'i' };
+  if (filter.status) contractorFilter.isActive = filter.status;
+  if (filter.departmentId) contractorFilter['workInformation.department'] = new mongoose.Types.ObjectId(filter.departmentId);
+  if (filter.branchId) contractorFilter['workInformation.branch'] = new mongoose.Types.ObjectId(filter.branchId);
   const result = await User.paginate(contractorFilter, options);
 
   // Populate address, emergency contacts, and job items

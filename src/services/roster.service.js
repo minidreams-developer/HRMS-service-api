@@ -12,6 +12,7 @@ const day = (value) => {
 const end = (value) => new Date(day(value).getTime() + 86399999);
 const oid = (value) => new mongoose.Types.ObjectId(String(value));
 const managementRoles = new Set(['manager', 'hr_manager', 'subAdmin', 'admin']);
+const listValues = (value) => (value == null || value === '' ? [] : (Array.isArray(value) ? value : String(value).split(',')).map(String).map((v) => v.trim()).filter(Boolean));
 
 const ensureManagement = (actor) => {
   if (!managementRoles.has(actor.role)) throw new ApiError(httpStatus.FORBIDDEN, 'Only management may manage rosters');
@@ -103,12 +104,15 @@ const queryRoster = async (filter, options = {}) => {
   if (filter.status) query.status = filter.status; else query.status = 'scheduled';
   if (filter.date) query.date = day(filter.date);
   else if (filter.fromDate || filter.toDate) query.date = { ...(filter.fromDate ? { $gte: day(filter.fromDate) } : {}), ...(filter.toDate ? { $lte: end(filter.toDate) } : {}) };
-  if (filter.employeeId) query.employeeId = oid(filter.employeeId);
-  if (filter.shiftId) query.shiftId = oid(filter.shiftId);
+  const employeeIds = listValues(filter.employeeIds || filter.employeeId);
+  if (employeeIds.length) query.employeeId = { $in: employeeIds.map(oid) };
+  const shiftIds = listValues(filter.shiftIds || filter.shiftId);
+  if (shiftIds.length) query.shiftId = { $in: shiftIds.map(oid) };
   if (filter.role || filter.departmentId || filter.search) {
     const userQuery = { isDeleted: { $ne: true } };
     if (filter.role) userQuery.role = filter.role;
-    if (filter.departmentId) userQuery['workInformation.department'] = oid(filter.departmentId);
+    const departmentIds = listValues(filter.departmentIds || filter.departmentId);
+    if (departmentIds.length) userQuery['workInformation.department'] = { $in: departmentIds.map(oid) };
     if (filter.search) userQuery.$or = [{ name: { $regex: filter.search, $options: 'i' } }, { employeeId: { $regex: filter.search, $options: 'i' } }];
     query.employeeId = { $in: (await User.find(userQuery).select('_id').lean()).map((user) => user._id) };
   }
@@ -117,18 +121,18 @@ const queryRoster = async (filter, options = {}) => {
   // Include the current active workforce count for every shift returned by
   // the roster. This is based on the employee/staff shift assignment, not on
   // the number of roster rows in the current page.
-  const shiftIds = [...new Set(result.results
+  const returnedShiftIds = [...new Set(result.results
     .map((roster) => roster.shiftId?._id || roster.shiftId)
     .filter(Boolean)
     .map((shiftId) => String(shiftId)))].map((shiftId) => oid(shiftId));
-  if (shiftIds.length) {
+  if (returnedShiftIds.length) {
     const activeUsersByShift = await User.aggregate([
       {
         $match: {
           role: { $in: ['employee', 'staff'] },
           isActive: 'Active',
           isDeleted: { $ne: true },
-          'workInformation.shiftId': { $in: shiftIds },
+          'workInformation.shiftId': { $in: returnedShiftIds },
         },
       },
       { $group: { _id: '$workInformation.shiftId', total: { $sum: 1 } } },

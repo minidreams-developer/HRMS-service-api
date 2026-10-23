@@ -4,6 +4,7 @@ const { getEmployeeShiftForDate } = require('./shiftAssignment.service');
 const { getEffectiveShiftForDate } = require('./roster.service');
 const { detectOverlappingOvertime } = require('./overtimeOverlap.service');
 const ApiError = require('../utils/ApiError');
+const { parseList, parseSort } = require('../utils/queryFilters');
 
 const DAY = 86400000;
 const day = (value) => { const d = new Date(value); if (Number.isNaN(d.getTime())) throw new ApiError(400, 'Invalid date'); return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())); };
@@ -37,7 +38,18 @@ const getUsers = async (options) => {
     filter.$or = [{ name: regex }, { employeeId: regex }];
   }
   const users = await User.find(filter).select('name employeeId role workInformation').lean();
-  return users.filter((user) => matchesDepartment(user, options.departmentId));
+  const departmentIds = parseList(options.departmentIds || options.departmentId);
+  const designationIds = parseList(options.designationIds);
+  const shiftIds = parseList(options.shiftIds || options.shiftId);
+  return users.filter((user) => {
+    const department = id(user.workInformation?.department?._id || user.workInformation?.department?.id || user.workInformation?.department);
+    const designation = id(user.workInformation?.designationId || user.workInformation?.designation);
+    const shift = id(user.workInformation?.shiftId?._id || user.workInformation?.shiftId);
+    return (!departmentIds.length || departmentIds.includes(department))
+      && (!options.designation || String(user.workInformation?.designation || '').toLowerCase() === String(options.designation).toLowerCase())
+      && (!designationIds.length || designationIds.includes(designation))
+      && (!shiftIds.length || shiftIds.includes(shift));
+  });
 };
 
 const loadSources = async (users, from, to) => {
@@ -148,7 +160,11 @@ const getQuickStats = async (options) => {
 
 const getDay = async (options) => {
   const users = await getUsers(options); const states = (await statesFor(users, [day(options.date)])).filter((s) => filterStatus(s, options.status));
-  const shiftFiltered = options.shiftId ? states.filter((s) => id(s.shift?._id || s.shift?.shiftId) === String(options.shiftId)) : states;
+  const shiftIds = parseList(options.shiftIds || options.shiftId);
+  const shiftFiltered = shiftIds.length ? states.filter((s) => shiftIds.includes(id(s.shift?._id || s.shift?.shiftId))) : states;
+  const sort = parseSort(options.sortBy, ['date', 'name', 'status'], { date: -1 });
+  if (sort.name) shiftFiltered.sort((a, b) => (a.user.name || '').localeCompare(b.user.name || '') * sort.name);
+  if (sort.date) shiftFiltered.sort((a, b) => (a.date < b.date ? -1 : 1) * sort.date);
   const page = Number(options.page) || 1; const limit = Number(options.limit) || 10;
   return { date: key(options.date), role: options.role, ...pagination(shiftFiltered.map(present), page, limit) };
 };
@@ -156,7 +172,10 @@ const getDay = async (options) => {
 const getWeek = async (options) => {
   const users = await getUsers(options); const dateList = days(options.startDate, 7); const states = await statesFor(users, dateList); const grouped = new Map();
   states.forEach((s) => { if (!grouped.has(id(s.user._id))) grouped.set(id(s.user._id), { ...userView(s.user), days: [] }); grouped.get(id(s.user._id)).days.push(present(s)); });
-  let results = [...grouped.values()]; if (options.shiftId) results = results.filter((r) => r.days.some((d) => id(d.shift?.id) === String(options.shiftId))); const page = Number(options.page) || 1; const limit = Number(options.limit) || 10;
+  let results = [...grouped.values()]; const shiftIds = parseList(options.shiftIds || options.shiftId); if (shiftIds.length) results = results.filter((r) => r.days.some((d) => shiftIds.includes(id(d.shift?.id))));
+  const sort = parseSort(options.sortBy, ['name', 'status'], { name: 1 });
+  if (sort.name) results.sort((a, b) => (a.name || '').localeCompare(b.name || '') * sort.name);
+  const page = Number(options.page) || 1; const limit = Number(options.limit) || 10;
   return { startDate: key(options.startDate), endDate: key(dateList[6]), role: options.role, ...pagination(results, page, limit) };
 };
 

@@ -31,7 +31,7 @@ router
 
 router
   .route('/')
-  .get(auth(), contractorController.getContractors);
+  .get(auth(), validate(contractorValidation.getContractors), contractorController.getContractors);
 
 router.get('/:contractorId/workers', auth(), contractorController.getContractorWorkers);
 router.get('/:contractorId/earnings', auth(), contractorController.getContractorEarnings);

@@ -83,6 +83,9 @@ const registerContractor = {
 const getContractors = {
   query: Joi.object().keys({
     name: Joi.string(),
+    status: Joi.string().valid('Active', 'Inactive', 'Relieved'),
+    departmentId: Joi.string().custom(objectId),
+    branchId: Joi.string().custom(objectId),
     sortBy: Joi.string(),
     limit: Joi.number().integer(),
     page: Joi.number().integer(),

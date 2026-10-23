@@ -5,6 +5,7 @@ const { getApplicableHolidays } = require('./holiday.service');
 const { getEmployeeShiftForDate } = require('./shiftAssignment.service');
 const { getEffectiveShiftForDate } = require('./roster.service');
 const ApiError = require('../utils/ApiError');
+const { parseList } = require('../utils/queryFilters');
 
 const utcDay = (value) => {
   const date = new Date(value);
@@ -279,7 +280,16 @@ const queryLeaveRequests = async (filter, options) => {
 
   // Department filter
   if (filter.departmentId) {
-    mongoFilter.department = filter.departmentId;
+    mongoFilter.department = isObjectId(filter.departmentId) ? new mongoose.Types.ObjectId(filter.departmentId) : filter.departmentId;
+  }
+  const departmentIds = parseList(filter.departmentIds || filter.departmentId);
+  if (departmentIds.length > 1) mongoFilter.department = { $in: departmentIds.filter(isObjectId).map((value) => new mongoose.Types.ObjectId(value)) };
+  if (filter.designation) mongoFilter.designation = { $regex: `^${String(filter.designation).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, $options: 'i' };
+  const designationIds = parseList(filter.designationIds);
+  if (designationIds.length) {
+    const designationUsers = await User.find({ 'workInformation.designationId': { $in: designationIds.filter(isObjectId).map((value) => new mongoose.Types.ObjectId(value)) } }, { _id: 1 }).lean();
+    const ids = designationUsers.map((user) => user._id);
+    mongoFilter.employeeId = mongoFilter.employeeId ? { $in: ids.filter((value) => mongoFilter.employeeId.$in.some((idValue) => String(idValue) === String(value))) } : { $in: ids };
   }
 
   // Date range — match any leave that overlaps the requested period.

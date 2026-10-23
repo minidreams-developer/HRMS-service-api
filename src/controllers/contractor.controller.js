@@ -34,7 +34,7 @@ const generateContractorId = catchAsync(async (req, res) => {
  */
 const getContractors = catchAsync(async (req, res) => {
   guard(req);
-  const filter = pick(req.query, ['name']);
+  const filter = pick(req.query, ['name', 'status', 'departmentId', 'branchId']);
   const options = pick(req.query, ['sortBy', 'limit', 'page']);
   const result = await contractorService.queryContractors(filter, options);
   res.send(result);

@@ -93,6 +93,7 @@ const getShifts = {
     shiftName:     Joi.string().optional(),
     shiftCode:     Joi.string().optional(),
     shiftType:     Joi.string().optional(),
+    shiftTypes:    Joi.alternatives().try(Joi.string(), Joi.array().items(Joi.string())).optional(),
     isShiftActive: Joi.boolean().optional(),
     // pagination & sorting
     sortBy:        Joi.string().optional(),

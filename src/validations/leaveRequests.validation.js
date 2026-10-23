@@ -38,6 +38,9 @@ const getLeaveRequests = {
     leaveType:    Joi.string().optional(),
     status:       Joi.string().valid('pending', 'approved', 'rejected', 'cancelled', 'ended').optional(),
     departmentId: Joi.string().custom(objectId).optional(),
+    departmentIds: Joi.alternatives().try(Joi.string(), Joi.array().items(Joi.string().custom(objectId))).optional(),
+    designation: Joi.string().optional(),
+    designationIds: Joi.alternatives().try(Joi.string(), Joi.array().items(Joi.string().custom(objectId))).optional(),
     // date range — covers startDate / singleDate
     fromDate:     Joi.date().iso().optional(),
     toDate:       Joi.date().iso().optional(),
