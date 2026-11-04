@@ -16,6 +16,14 @@ const ApiError = require('./utils/ApiError');
 
 const app = express();
 
+app.get(['/health', '/v1/health'], (req, res) => {
+  res.status(200).send({ status: 'ok' });
+});
+
+app.get('/', (req, res) => {
+  res.status(200).send({ message: 'Welcome to Sangam API server' });
+});
+
 if (config.env !== 'test') {
   app.use(morgan.successHandler);
   app.use(morgan.errorHandler);
