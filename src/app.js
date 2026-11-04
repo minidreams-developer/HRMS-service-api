@@ -21,7 +21,7 @@ app.get(['/health', '/v1/health'], (req, res) => {
 });
 
 app.get('/', (req, res) => {
-  res.status(200).send({ message: 'Welcome to Sangam API server' });
+  res.status(200).send({ message: 'Welcome to HRMS API server' });
 });
 
 if (config.env !== 'test') {
